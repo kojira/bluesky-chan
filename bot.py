@@ -87,11 +87,8 @@ def fortune(connection, prompt, eline):
   fortuneOk = False
   if row:
     now = datetime.now(pytz.utc)
-    # created_at = datetime.strptime(row["created_at"], '%Y-%m-%d %H:%M:%S')
     created_at = datetime.fromisoformat(row["created_at"].replace('Z', '+00:00'))
     created_at = created_at.replace(tzinfo=pytz.utc)
-    # created_at = datetime.fromisoformat(
-    #     row["created_at"].replace('Z', '+00:00')).replace(tzinfo=timezone.utc)
     if (now - created_at) >= timedelta(hours=24):
       fortuneOk = True
     else:
@@ -140,6 +137,9 @@ while True:
   feed = skyline.json().get('feed')
   for line in feed:
     eline = EasyDict(line)
+    if eline.post.author.handle == username:
+      # 自分自身には反応しない
+      continue
     postDatetime = datetime.strptime(eline.post.indexedAt, '%Y-%m-%dT%H:%M:%S.%fZ')
     if now < postDatetime:
       print(postDatetime)
