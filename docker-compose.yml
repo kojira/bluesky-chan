@@ -1,0 +1,12 @@
+version: "3.9"
+services:
+  summarize:
+    container_name: bot
+    build:
+      context: "./"
+      dockerfile: "./Dockerfile"
+    volumes:
+      - "./:/var/bot/"
+    tty: true
+    working_dir: /var/bot/
+    command: python bot.py
