@@ -6,7 +6,7 @@ This is a chatbot using gpt3.5 turbo of openai that works with python.
 
 ```sh
 git clone https://github.com/kojira/bluesky-chan.git
-cd nostr-chan
+cd bluesky-chan
 cp .env.example .env
 ```
 
