@@ -136,7 +136,7 @@ now = datetime.utcnow()
 answered = None
 while True:
   # print(now)
-  skyline = session.getSkyline(30)
+  skyline = session.getSkyline(100)
   feed = skyline.json().get('feed')
   for line in feed:
     eline = EasyDict(line)
