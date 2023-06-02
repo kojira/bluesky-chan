@@ -171,10 +171,12 @@ while True:
             print(line)
             bonus = 0
             if has_mention(bot_names, text):
-              bonus = 10
+              bonus = 5
             if answered is None or (now - answered) >= timedelta(minutes=20):
               bonus = 100
-            if random.uniform(0, 100) <= (3 + bonus):
+            percent = random.uniform(0, 100)
+            print(percent, bonus)
+            if percent <= (3 + bonus):
               print("atari")
               answer = gpt.get_answer(prompt, text)
               print(answer)
