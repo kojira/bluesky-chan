@@ -137,19 +137,20 @@ prompt = f"これはあなたの人格です。'{personality}'\nこの人格を�
 
 
 now = datetime.now(pytz.utc)
+started = now
 answered = None
 while True:
   skyline = session.getSkyline(50)
   feed = skyline.json().get('feed')
-  sorted_feed = sorted(feed, key=lambda x: parse(x["post"]["record"]["createdAt"]))
+  sorted_feed = sorted(feed, key=lambda x: parse(x["post"]["indexedAt"]))
 
   for line in sorted_feed:
     eline = EasyDict(line)
     if eline.post.author.handle == username:
       # 自分自身には反応しない
       continue
-    # print(eline.post.record.createdAt)
-    postDatetime = parse(eline.post.record.createdAt)
+    # print(eline.post.indexedAt)
+    postDatetime = parse(eline.post.indexedAt)
     if now < postDatetime:
       print(postDatetime)
       if "reply" not in eline.post.record and "reason" not in eline:
