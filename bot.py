@@ -167,15 +167,14 @@ while True:
              has_mention(bot_names, text):
             print(line)
             fortune(connection, prompt, eline)
-            now = postDatetime
           else:
             print(line)
             bonus = 0
             if has_mention(bot_names, text):
-              bonus = 10
-            if answered is None or (now - answered) >= timedelta(minutes=20):
               bonus = 100
-            if random.uniform(0, 100) <= (5 + bonus):
+            if answered is None or (now - answered) >= timedelta(minutes=20):
+              bonus = 500
+            if random.uniform(0, 1000) <= (20 + bonus):
               print("atari")
               answer = gpt.get_answer(prompt, text)
               print(answer)
@@ -183,4 +182,5 @@ while True:
               answered = datetime.now(pytz.utc)
             else:
               print("hazure")
+        now = postDatetime
   time.sleep(5)
