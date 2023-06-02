@@ -135,7 +135,7 @@ prompt = f"これはあなたの人格です。'{personality}'\nこの人格を�
 now = datetime.utcnow()
 answered = None
 while True:
-  print(now)
+  # print(now)
   skyline = session.getSkyline(30)
   feed = skyline.json().get('feed')
   for line in feed:
@@ -156,12 +156,13 @@ while True:
                   detect_mention = True
                   break
         if not detect_mention:
-          print(line)
           text = eline.post.record.text
           if "占って" in text and\
              has_mention(bot_names, text):
+            print(line)
             fortune(connection, prompt, eline)
           else:
+            print(line)
             bonus = 0
             if has_mention(bot_names, text):
               bonus = 10
@@ -173,6 +174,6 @@ while True:
               reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
               now = datetime.utcnow()
               answered = now
-      print("----")
+      # print("----")
   now = datetime.utcnow()
   time.sleep(5)
