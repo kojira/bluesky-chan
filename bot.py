@@ -7,6 +7,7 @@ from easydict import EasyDict
 import gpt
 from datetime import datetime, timedelta
 import pytz
+from dateutil.parser import parse
 import random
 
 connection = sqlite3.connect("bluesky.db")
@@ -79,6 +80,7 @@ def has_mention(bot_names, text):
     if bot_name in text:
       found = True
       break
+  print("found:", found)
   return found
 
 
@@ -87,20 +89,22 @@ def fortune(connection, prompt, eline):
   fortuneOk = False
   if row:
     now = datetime.now(pytz.utc)
-    created_at = datetime.fromisoformat(row["created_at"].replace('Z', '+00:00'))
-    created_at = created_at.replace(tzinfo=pytz.utc)
+    created_at = parse(row["created_at"])
+    # created_at = created_at.replace(tzinfo=pytz.utc)
     if (now - created_at) >= timedelta(hours=24):
       fortuneOk = True
     else:
       remaining_time = str(timedelta(hours=24) - (now - created_at))
       answer = f"占いは24時間に1回までですわ。\nふふ、そう逸らないことね。\nあと約{remaining_time} ほどお待ち遊ばせ。"
       reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
+      print(answer)
   else:
     fortuneOk = True
   if fortuneOk:
     user_text = eline.post.record.text
     text = "今日のわたしの運勢を占って。結果はランダムで決めて、" +\
         f"その結果に従って占いの内容を運の良さは★マークを５段階でラッキーアイテム、ラッキーカラーとかも教えて。{user_text}"
+    print("fortune")
     answer = gpt.get_answer(prompt, text)
     record_reaction(connection, eline)
     print(answer)
@@ -126,24 +130,26 @@ AT Protocolの擬人化。一人称は「わたくし」でお嬢様言葉を使
 
 bot_names = [
     "Blueskyちゃん", "Bluesky ちゃん", "bluesky ちゃん", "blueskyちゃん",
-    "ブルースカイちゃん", "ぶるすこちゃん", "ブルスコちゃん"
+    "ブルースカイちゃん", "ぶるすこちゃん", "ブルスコちゃん",
 ]
 
 prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して200文字以内で返信してください。"
 
 
-now = datetime.utcnow()
+now = datetime.now(pytz.utc)
 answered = None
 while True:
-  # print(now)
-  skyline = session.getSkyline(100)
+  skyline = session.getSkyline(50)
   feed = skyline.json().get('feed')
-  for line in feed:
+  sorted_feed = sorted(feed, key=lambda x: parse(x["post"]["record"]["createdAt"]))
+
+  for line in sorted_feed:
     eline = EasyDict(line)
     if eline.post.author.handle == username:
       # 自分自身には反応しない
       continue
-    postDatetime = datetime.strptime(eline.post.indexedAt, '%Y-%m-%dT%H:%M:%S.%fZ')
+    # print(eline.post.record.createdAt)
+    postDatetime = parse(eline.post.record.createdAt)
     if now < postDatetime:
       print(postDatetime)
       if "reply" not in eline.post.record and "reason" not in eline:
@@ -161,6 +167,7 @@ while True:
              has_mention(bot_names, text):
             print(line)
             fortune(connection, prompt, eline)
+            now = postDatetime
           else:
             print(line)
             bonus = 0
@@ -169,11 +176,11 @@ while True:
             if answered is None or (now - answered) >= timedelta(minutes=20):
               bonus = 100
             if random.uniform(0, 100) <= (5 + bonus):
+              print("atari")
               answer = gpt.get_answer(prompt, text)
               print(answer)
               reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
-              now = datetime.utcnow()
-              answered = now
-      # print("----")
-  now = datetime.utcnow()
+              answered = datetime.now(pytz.utc)
+            else:
+              print("hazure")
   time.sleep(5)
