@@ -10,3 +10,4 @@ services:
     tty: true
     working_dir: /var/bot/
     command: python bot.py
+    restart: always
