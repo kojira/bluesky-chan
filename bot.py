@@ -192,10 +192,10 @@ while True:
   if count % 100 == 0:
     if posted_count < count:
       if count % 10000 == 0:
-        post(f"お兄さま、見てくださいまし！Blueskyのユーザーがついに{count}人になりましたわよ。素晴らしいですわ！皆様の努力の賜物ですわね！")
+        post(session, f"お兄さま、見てくださいまし！Blueskyのユーザーがついに{count}人になりましたわよ。素晴らしいですわ！皆様の努力の賜物ですわね！")
       elif count % 1000 == 0:
-        post(f"うふふ、お兄さま、Blueskyのユーザーが{count}人になりましたわね。")
+        post(session, f"うふふ、お兄さま、Blueskyのユーザーが{count}人になりましたわね。")
       else:
-        post(f"ふふ、お兄さま、Blueskyのユーザーが{count}人になりましたわよ。")
+        post(session, f"ふふ、お兄さま、Blueskyのユーザーが{count}人になりましたわよ。")
 
       util.store_posted_user_count(connection, count)
