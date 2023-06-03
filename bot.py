@@ -9,9 +9,9 @@ from datetime import datetime, timedelta
 import pytz
 from dateutil.parser import parse
 import random
+import util
 
-connection = sqlite3.connect("bluesky.db")
-cur = connection.cursor()
+connection_atp = sqlite3.connect("atp.db")
 
 dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
 load_dotenv(dotenv_path)
@@ -46,46 +46,8 @@ def reply_to(session, text, cid, uri):
   session.postBloot(text, reply_to=reply_ref)
 
 
-def record_reaction(connection, eline):
-  reaction = {"did": eline.post.author.did,
-              "handle": eline.post.author.handle,
-              "displayName": eline.post.author.displayName,
-              "created_at": eline.post.indexedAt}
-  sql = """
-    INSERT INTO reactions (did, handle, displayName, created_at)
-              VALUES (:did, :handle, :displayName, :created_at)
-  """
-  cur = connection.cursor()
-  cur.execute(sql, reaction)
-  connection.commit()
-
-
-def get_latest_record_by_did(connection, did):
-  sql = """
-    SELECT *
-    FROM reactions
-    WHERE did = :did
-    ORDER BY created_at DESC
-    LIMIT 1
-  """
-  cur = connection.cursor()
-  cur.execute(sql, {'did': did})
-  row = cur.fetchone()
-  return row
-
-
-def has_mention(bot_names, text):
-  found = False
-  for bot_name in bot_names:
-    if bot_name in text:
-      found = True
-      break
-  print("found:", found)
-  return found
-
-
 def fortune(connection, prompt, eline):
-  row = get_latest_record_by_did(connection, eline.post.author.did)
+  row = util.get_latest_record_by_did(connection, eline.post.author.did)
   fortuneOk = False
   if row:
     now = datetime.now(pytz.utc)
@@ -106,9 +68,22 @@ def fortune(connection, prompt, eline):
         f"その結果に従って占いの内容を運の良さは★マークを５段階でラッキーアイテム、ラッキーカラーとかも教えて。{user_text}"
     print("fortune")
     answer = gpt.get_answer(prompt, text)
-    record_reaction(connection, eline)
+    util.record_reaction(connection, eline)
     print(answer)
     reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
+
+
+def status(connection_atp, eline):
+  did = eline.post.author.did.replace("did:plc:", "")
+  result = util.get_user_info(connection_atp, did)
+  startDateTime = result["created_at"]
+  order = result["order"]
+  status_text = "ふふ、あなたのステータスをお知らせしますわ。\n" +\
+      f"あなたは{order}番目のアカウントのようですわ。\n" + \
+      f"作られた日時は{startDateTime} ですわね。\n" + \
+      "ごきげんよう。"
+
+  return status_text
 
 
 session = Session(username, password)
@@ -130,8 +105,12 @@ AT Protocolの擬人化。一人称は「わたくし」でお嬢様言葉を使
 
 bot_names = [
     "Blueskyちゃん", "Bluesky ちゃん", "bluesky ちゃん", "blueskyちゃん",
-    "ブルースカイちゃん", "ぶるすこちゃん", "ブルスコちゃん",
+    "ブルースカイちゃん", "ぶるすこちゃん", "ブルスコちゃん", "ブルス子ちゃん",
 ]
+# bot_names = [
+#     "テストちゃん"
+# ]
+
 
 prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して30〜200文字以内で返信してください。"
 
@@ -165,13 +144,19 @@ while True:
         if not detect_mention:
           text = eline.post.record.text
           if "占って" in text and\
-             has_mention(bot_names, text):
+             util.has_mention(bot_names, text):
             print(line)
             fortune(connection, prompt, eline)
+          elif "status" in text and\
+                  util.has_mention(bot_names, text):
+            print(line)
+            answer = status(connection_atp, eline)
+            print(answer)
+            reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
           else:
             print(line)
             bonus = 0
-            if has_mention(bot_names, text):
+            if util.has_mention(bot_names, text):
               bonus = 5
             if answered is None or (now - answered) >= timedelta(minutes=20):
               bonus = 100
@@ -186,4 +171,5 @@ while True:
             else:
               print("hazure")
         now = postDatetime
-  time.sleep(5)
+  time.sleep(3)
+  util.aggregate_users(connection_atp)
