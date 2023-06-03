@@ -33,6 +33,18 @@ CREATE TABLE IF NOT EXISTS reactions
    )
 """)
 
+cur.execute("""
+CREATE TABLE IF NOT EXISTS count_post
+  (id INTEGER PRIMARY KEY AUTOINCREMENT,
+   count INTEGER,
+   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+   )
+""")
+
+
+def post(session, text):
+  session.postBloot(text)
+
 
 def reply_to(session, text, cid, uri):
   reply = {
@@ -52,7 +64,6 @@ def fortune(connection, prompt, eline):
   if row:
     now = datetime.now(pytz.utc)
     created_at = parse(row["created_at"])
-    # created_at = created_at.replace(tzinfo=pytz.utc)
     if (now - created_at) >= timedelta(hours=24):
       fortuneOk = True
     else:
@@ -80,7 +91,7 @@ def status(connection_atp, eline):
   order = result["order"]
   status_text = "ふふ、あなたのステータスをお知らせしますわ。\n" +\
       f"あなたは{order}番目のアカウントのようですわ。\n" + \
-      f"作られた日時は{startDateTime} ですわね。\n" + \
+      f"作られた日時は世界標準時で {startDateTime} ですわね。\n" + \
       "ごきげんよう。"
 
   return status_text
@@ -118,6 +129,7 @@ prompt = f"これはあなたの人格です。'{personality}'\nこの人格を�
 now = datetime.now(pytz.utc)
 started = now
 answered = None
+count = 0
 while True:
   skyline = session.getSkyline(50)
   feed = skyline.json().get('feed')
@@ -170,6 +182,20 @@ while True:
               answered = datetime.now(pytz.utc)
             else:
               print("hazure")
-        now = postDatetime
+      now = postDatetime
   time.sleep(3)
-  util.aggregate_users(connection_atp)
+  prev_count = count
+  count = util.aggregate_users(connection_atp)
+  posted_count = util.get_posted_user_count(connection)
+  if prev_count != count:
+    print(count)
+  if count % 100 == 0:
+    if posted_count < count:
+      if count % 10000 == 0:
+        post(f"お兄さま、見てくださいまし！Blueskyのユーザーがついに{count}人になりましたわよ。素晴らしいですわ！皆様の努力の賜物ですわね！")
+      elif count % 1000 == 0:
+        post(f"うふふ、お兄さま、Blueskyのユーザーが{count}人になりましたわね。")
+      else:
+        post(f"ふふ、お兄さま、Blueskyのユーザーが{count}人になりましたわよ。")
+
+      util.store_posted_user_count(connection, count)

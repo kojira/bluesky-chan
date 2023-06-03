@@ -119,10 +119,35 @@ def get_user_count(connection):
   return count
 
 
+def store_posted_user_count(connection, count):
+  cur = connection.cursor()
+  sql = """
+    INSERT INTO count_post (count)
+              VALUES (:count)
+  """
+  cur = connection.cursor()
+  cur.execute(sql, {"count": count})
+  connection.commit()
+
+
+def get_posted_user_count(connection):
+  cur = connection.cursor()
+  sql = """
+    SELECT count FROM count_post ORDER BY created_at DESC LIMIT 1
+  """
+  cur = connection.cursor()
+  cur.execute(sql)
+  row = cur.fetchone()
+  count = 0
+  if row:
+    count = row[0]
+  return count
+
+
 def aggregate_users(connection, last_created_at=None):
   if last_created_at is None:
     last_created_at = get_last_created_at(connection)
-    print(last_created_at)
+    # print(last_created_at)
   did_list_text = get_did_list(last_created_at)
   did_json_list = did_list_text.split("\n")
   did_list = []
@@ -149,4 +174,4 @@ def aggregate_users(connection, last_created_at=None):
       insert_did_many(connection, did_list)
 
   count = get_user_count(connection)
-  print(count)
+  return count
