@@ -189,7 +189,7 @@ while True:
   posted_count = util.get_posted_user_count(connection)
   if prev_count != count:
     print(count)
-  if count % 100 == 0:
+  if count % 100 == 0 or (posted_count + 100) <= count:
     if posted_count < count:
       if count % 10000 == 0:
         post(session, f"お兄さま、見てくださいまし！Blueskyのユーザーがついに{count}人になりましたわよ。素晴らしいですわ！皆様の努力の賜物ですわね！")
