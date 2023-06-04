@@ -3,9 +3,10 @@ import json
 
 
 def record_reaction(connection, eline):
+  displayName = eline.post.author.displayName if "displayName" in eline.post.author else ""
   reaction = {"did": eline.post.author.did,
               "handle": eline.post.author.handle,
-              "displayName": eline.post.author.displayName,
+              "displayName": displayName,
               "created_at": eline.post.indexedAt}
   sql = """
     INSERT INTO reactions (did, handle, displayName, created_at)

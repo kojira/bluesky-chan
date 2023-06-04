@@ -36,6 +36,27 @@ CREATE TABLE IF NOT EXISTS reactions
 """)
 
 cur.execute("""
+CREATE TABLE IF NOT EXISTS users
+  (id INTEGER PRIMARY KEY AUTOINCREMENT,
+   DID TEXT,
+   handle TEXT,
+   post_count INTEGER,
+   pref TEXT,
+   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   update_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+   )
+""")
+
+cur.execute("""
+CREATE TRIGGER IF NOT EXISTS update_users_timestamp
+AFTER UPDATE ON users
+FOR EACH ROW
+BEGIN
+  UPDATE users SET update_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
+END;
+""")
+
+cur.execute("""
 CREATE TABLE IF NOT EXISTS count_post
   (id INTEGER PRIMARY KEY AUTOINCREMENT,
    count INTEGER,
@@ -238,9 +259,9 @@ bot_names = [
     "Blueskyちゃん", "Bluesky ちゃん", "bluesky ちゃん", "blueskyちゃん",
     "ブルースカイちゃん", "ぶるすこちゃん", "ブルスコちゃん", "ブルス子ちゃん",
 ]
-# bot_names = [
-#     "テストちゃん"
-# ]
+bot_names = [
+    "テストちゃん"
+]
 
 
 prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して30〜200文字以内で返信してください。"
