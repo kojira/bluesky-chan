@@ -10,6 +10,7 @@ import pytz
 from dateutil.parser import parse
 import random
 import util
+import json
 
 connection_atp = sqlite3.connect("atp.db")
 
@@ -58,6 +59,11 @@ def reply_to(session, text, cid, uri):
   session.postBloot(text, reply_to=reply_ref)
 
 
+def get_profile(session, handle):
+  response = session.get_profile(handle)
+  return json.loads(response.text)
+
+
 def fortune(connection, prompt, eline):
   row = util.get_latest_record_by_did(connection, eline.post.author.did)
   fortuneOk = False
@@ -84,14 +90,26 @@ def fortune(connection, prompt, eline):
     reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
 
 
-def status(connection_atp, eline):
+def status(connection_atp, session, eline):
+  profile = get_profile(session, eline.post.author.handle)
+  postsCount = profile["postsCount"]
   did = eline.post.author.did.replace("did:plc:", "")
   result = util.get_user_info(connection_atp, did)
   startDateTime = result["created_at"]
+  parsedStartDateTime = parse(startDateTime)
+  now = datetime.now(pytz.utc)
+  time_elapsed = now - parsedStartDateTime
+  days = time_elapsed.days
+  hours, remainder = divmod(time_elapsed.seconds, 3600)
+  minutes, _ = divmod(remainder, 60)
+  average_post = postsCount / days
+
   order = result["order"]
   status_text = "ふふ、あなたのステータスをお知らせしますわ。\n" +\
       f"あなたは{order}番目のアカウントのようですわ。\n" + \
       f"作られた日時は世界標準時で {startDateTime} ですわね。\n" + \
+      f"あなたが来てから{days}日と{hours}時間{minutes}分が経ちましたのね。\n" + \
+      f"1日あたりの投稿数は約{average_post:.2f}回のようですわ。\n" + \
       "ごきげんよう。"
 
   return status_text
@@ -162,7 +180,7 @@ while True:
           elif "status" in text and\
                   util.has_mention(bot_names, text):
             print(line)
-            answer = status(connection_atp, eline)
+            answer = status(connection_atp, session, eline)
             print(answer)
             reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
           else:
