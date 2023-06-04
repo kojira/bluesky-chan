@@ -38,10 +38,10 @@ CREATE TABLE IF NOT EXISTS reactions
 cur.execute("""
 CREATE TABLE IF NOT EXISTS users
   (id INTEGER PRIMARY KEY AUTOINCREMENT,
-   DID TEXT,
-   handle TEXT,
-   post_count INTEGER,
-   pref TEXT,
+   did TEXT UNIQUE,
+   mode INTEGER,
+   analyze INTEGER,
+   points INTEGER,
    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
    update_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
    )
@@ -152,27 +152,10 @@ def get_followers(session, handle):
   return all_follower_list
 
 
-def is_follower(session, bot_handle, handle, followers=None):
-  cursor = None
+def is_follower(session, bot_handle, handle, followers):
   folowed = False
-  while True:
-    if followers is None:
-      response = _get_followers(session, bot_handle, limit=100, cursor=cursor)
-      followers = response["followers"]
-      follower_list = [follower["handle"] for follower in followers]
-    else:
-      follower_list = followers
-    if handle in follower_list:
-      folowed = True
-      break
-
-    prev_cursor = cursor
-    if "cursor" in response:
-      cursor = response["cursor"]
-    if cursor is None or prev_cursor == cursor or len(follower_list) < 100:
-      break
-    time.sleep(0.05)
-
+  if handle in followers:
+    folowed = True
   return folowed
 
 
@@ -238,6 +221,11 @@ def status(connection_atp, session, eline):
   return status_text
 
 
+def friend(connection, did):
+  did = did.replace("did:plc:", "")
+  return text
+
+
 session = Session(username, password)
 
 personality = """
@@ -259,9 +247,9 @@ bot_names = [
     "Blueskyちゃん", "Bluesky ちゃん", "bluesky ちゃん", "blueskyちゃん",
     "ブルースカイちゃん", "ぶるすこちゃん", "ブルスコちゃん", "ブルス子ちゃん",
 ]
-bot_names = [
-    "テストちゃん"
-]
+# bot_names = [
+#     "テストちゃん"
+# ]
 
 
 prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して30〜200文字以内で返信してください。"
@@ -311,6 +299,13 @@ while True:
               print(line)
               answer = status(connection_atp, session, eline)
               print(answer)
+              reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
+            elif "friend" in text and\
+                    util.has_mention(bot_names, text):
+              friend(connection, eline.post.author.did)
+              reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
+            elif "silent" in text and\
+                    util.has_mention(bot_names, text):
               reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
             else:
               print(line)

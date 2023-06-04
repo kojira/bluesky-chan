@@ -17,6 +17,51 @@ def record_reaction(connection, eline):
   connection.commit()
 
 
+def insert_user_settings(connection, did):
+
+  sql = """
+    INSERT INTO users (did, mode, analyze, points)
+              VALUES (:did, 0, 0, 0)
+  """
+  params = {
+      "did": did,
+  }
+  cur = connection.cursor()
+  cur.execute(sql, params)
+  connection.commit()
+
+
+def select_user_settings(connection, did):
+  sql = """
+    SELECT * FROM users WHERE did=:did
+  """
+  params = {
+      "did": did,
+  }
+  cur = connection.cursor()
+  cur.execute(sql, params)
+  row = cur.fetchone()
+
+
+def update_user_settings(connection, did, settings):
+  sql = """
+    UPDATE users SET
+      mode=:mode,
+      analyze=:analyze,
+      points=:points,
+      WHERE did=:did
+  """
+  params = {
+      "did": did,
+      "mode": settings.mode,
+      "analyze": settings.analyze,
+      "points": settings.points,
+  }
+  cur = connection.cursor()
+  cur.execute(sql, params)
+  connection.commit()
+
+
 def get_latest_record_by_did(connection, did):
   sql = """
     SELECT *
