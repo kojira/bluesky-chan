@@ -102,7 +102,7 @@ def status(connection_atp, session, eline):
   days = time_elapsed.days
   hours, remainder = divmod(time_elapsed.seconds, 3600)
   minutes, _ = divmod(remainder, 60)
-  average_post = postsCount / days
+  average_post = postsCount / (days + hours / 24 + minutes / 60 / 24)
 
   order = result["order"]
   status_text = "ふふ、あなたのステータスをお知らせしますわ。\n" +\
