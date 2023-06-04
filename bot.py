@@ -131,13 +131,16 @@ def get_followers(session, handle):
   return all_follower_list
 
 
-def is_follower(session, bot_handle, handle):
+def is_follower(session, bot_handle, handle, followers=None):
   cursor = None
   folowed = False
   while True:
-    response = _get_followers(session, bot_handle, limit=100, cursor=cursor)
-    followers = response["followers"]
-    follower_list = [follower["handle"] for follower in followers]
+    if followers is None:
+      response = _get_followers(session, bot_handle, limit=100, cursor=cursor)
+      followers = response["followers"]
+      follower_list = [follower["handle"] for follower in followers]
+    else:
+      follower_list = followers
     if handle in follower_list:
       folowed = True
       break
@@ -235,9 +238,9 @@ bot_names = [
     "Blueskyちゃん", "Bluesky ちゃん", "bluesky ちゃん", "blueskyちゃん",
     "ブルースカイちゃん", "ぶるすこちゃん", "ブルスコちゃん", "ブルス子ちゃん",
 ]
-bot_names = [
-    "テストちゃん"
-]
+# bot_names = [
+#     "テストちゃん"
+# ]
 
 
 prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して30〜200文字以内で返信してください。"
@@ -251,6 +254,7 @@ while True:
   skyline = session.getSkyline(50)
   feed = skyline.json().get('feed')
   sorted_feed = sorted(feed, key=lambda x: parse(x["post"]["indexedAt"]))
+  bot_followers = get_followers(session, username)
 
   for line in sorted_feed:
     eline = EasyDict(line)
@@ -261,7 +265,10 @@ while True:
     postDatetime = parse(eline.post.indexedAt)
     if now < postDatetime:
       print(postDatetime)
-      if is_follower(session, username, eline.post.author.handle):
+      if is_follower(session,
+                     username,
+                     eline.post.author.handle,
+                     followers=bot_followers):
         # フォロワのみ反応する
         if "reply" not in eline.post.record and "reason" not in eline:
           detect_mention = None
