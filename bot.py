@@ -11,6 +11,7 @@ from dateutil.parser import parse
 import random
 import util
 import json
+import requests
 
 connection_atp = sqlite3.connect("atp.db")
 
@@ -62,6 +63,104 @@ def reply_to(session, text, cid, uri):
 def get_profile(session, handle):
   response = session.get_profile(handle)
   return json.loads(response.text)
+
+
+def _get_follows(session, handle, limit=100, cursor=None):
+  headers = {"Authorization": "Bearer " + session.ATP_AUTH_TOKEN}
+
+  url = session.ATP_HOST +\
+      f"/xrpc/app.bsky.graph.getFollows?actor={handle}&limit={limit}"
+  if cursor:
+    url += f"&cursor={cursor}"
+
+  response = requests.get(
+      url,
+      headers=headers
+  )
+
+  return json.loads(response.text)
+
+
+def _get_followers(session, handle, limit=100, cursor=None):
+  headers = {"Authorization": "Bearer " + session.ATP_AUTH_TOKEN}
+
+  url = session.ATP_HOST +\
+      f"/xrpc/app.bsky.graph.getFollowers?actor={handle}&limit={limit}"
+  if cursor:
+    url += f"&cursor={cursor}"
+
+  response = requests.get(
+      url,
+      headers=headers
+  )
+
+  return json.loads(response.text)
+
+
+def get_follows(session, handle):
+  cursor = None
+  all_follow_list = []
+  while True:
+    response = _get_follows(session, handle, limit=100, cursor=cursor)
+    follows = response["follows"]
+    follow_list = [follow["handle"] for follow in follows]
+    all_follow_list.extend(follow_list)
+    prev_cursor = cursor
+    if "cursor" in response:
+      cursor = response["cursor"]
+    if cursor is None or prev_cursor == cursor or len(follow_list) < 100:
+      break
+
+  return all_follow_list
+
+
+def get_followers(session, handle):
+  cursor = None
+  all_follower_list = []
+  while True:
+    response = _get_followers(session, handle, limit=100, cursor=cursor)
+    followers = response["followers"]
+    follower_list = [follower["handle"] for follower in followers]
+    all_follower_list.extend(follower_list)
+    prev_cursor = cursor
+    if "cursor" in response:
+      cursor = response["cursor"]
+    if cursor is None or prev_cursor == cursor or len(follower_list) < 100:
+      break
+
+  return all_follower_list
+
+
+def is_follower(session, bot_handle, handle):
+  cursor = None
+  folowed = False
+  while True:
+    response = _get_followers(session, bot_handle, limit=100, cursor=cursor)
+    followers = response["followers"]
+    follower_list = [follower["handle"] for follower in followers]
+    if handle in follower_list:
+      folowed = True
+      break
+
+    prev_cursor = cursor
+    if "cursor" in response:
+      cursor = response["cursor"]
+    if cursor is None or prev_cursor == cursor or len(follower_list) < 100:
+      break
+    time.sleep(0.05)
+
+  return folowed
+
+
+def update_follow(session, bot_handle):
+  bot_follows = get_follows(session, bot_handle)
+  bot_followers = get_followers(session, bot_handle)
+  # unfollows = [item for item in bot_follows if item not in bot_followers]
+  followbacks = [item for item in bot_followers if item not in bot_follows]
+  for handle in followbacks:
+    response = session.follow(handle)
+    print(f"follow back:{handle}:{response}")
+    time.sleep(0.05)
 
 
 def fortune(connection, prompt, eline):
@@ -136,9 +235,9 @@ bot_names = [
     "Blueskyちゃん", "Bluesky ちゃん", "bluesky ちゃん", "blueskyちゃん",
     "ブルースカイちゃん", "ぶるすこちゃん", "ブルスコちゃん", "ブルス子ちゃん",
 ]
-# bot_names = [
-#     "テストちゃん"
-# ]
+bot_names = [
+    "テストちゃん"
+]
 
 
 prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して30〜200文字以内で返信してください。"
@@ -162,44 +261,46 @@ while True:
     postDatetime = parse(eline.post.indexedAt)
     if now < postDatetime:
       print(postDatetime)
-      if "reply" not in eline.post.record and "reason" not in eline:
-        detect_mention = None
-        if "facets" in eline.post.record:
-          for facet in eline.post.record.facets:
-            if "features" in facet:
-              for feature in facet.features:
-                if "did" in feature:
-                  detect_mention = True
-                  break
-        if not detect_mention:
-          text = eline.post.record.text
-          if "占って" in text and\
-             util.has_mention(bot_names, text):
-            print(line)
-            fortune(connection, prompt, eline)
-          elif "status" in text and\
-                  util.has_mention(bot_names, text):
-            print(line)
-            answer = status(connection_atp, session, eline)
-            print(answer)
-            reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
-          else:
-            print(line)
-            bonus = 0
-            if util.has_mention(bot_names, text):
-              bonus = 5
-            if answered is None or (now - answered) >= timedelta(minutes=20):
-              bonus = 100
-            percent = random.uniform(0, 100)
-            print(percent, bonus)
-            if percent <= (3 + bonus):
-              print("atari")
-              answer = gpt.get_answer(prompt, text)
+      if is_follower(session, username, eline.post.author.handle):
+        # フォロワのみ反応する
+        if "reply" not in eline.post.record and "reason" not in eline:
+          detect_mention = None
+          if "facets" in eline.post.record:
+            for facet in eline.post.record.facets:
+              if "features" in facet:
+                for feature in facet.features:
+                  if "did" in feature:
+                    detect_mention = True
+                    break
+          if not detect_mention:
+            text = eline.post.record.text
+            if "占って" in text and\
+                    util.has_mention(bot_names, text):
+              print(line)
+              fortune(connection, prompt, eline)
+            elif "status" in text and\
+                    util.has_mention(bot_names, text):
+              print(line)
+              answer = status(connection_atp, session, eline)
               print(answer)
               reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
-              answered = datetime.now(pytz.utc)
             else:
-              print("hazure")
+              print(line)
+              bonus = 0
+              if util.has_mention(bot_names, text):
+                bonus = 5
+              if answered is None or (now - answered) >= timedelta(minutes=20):
+                bonus = 100
+              percent = random.uniform(0, 100)
+              print(percent, bonus)
+              if percent <= (3 + bonus):
+                print("atari")
+                answer = gpt.get_answer(prompt, text)
+                print(answer)
+                reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
+                answered = datetime.now(pytz.utc)
+              else:
+                print("hazure")
       now = postDatetime
   time.sleep(3)
   prev_count = count
@@ -217,3 +318,5 @@ while True:
         post(session, f"ふふ、お兄さま、Blueskyのユーザーが{count}人になりましたわよ。")
 
       util.store_posted_user_count(connection, count)
+
+  update_follow(session, username)
