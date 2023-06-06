@@ -384,7 +384,7 @@ while True:
               bonus = 0
               if util.has_mention(bot_names, text):
                 bonus = 5
-              if settings["mode"] >= 0:
+              if settings["mode"] > 0:
                 if answered is None or (now - answered) >= timedelta(minutes=20):
                   bonus = 100
                 percent = random.uniform(0, 100)
