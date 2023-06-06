@@ -1,27 +1,41 @@
 import requests
 import json
+import sqlite3
 
 
 def record_reaction(connection, eline):
   displayName = eline.post.author.displayName if "displayName" in eline.post.author else ""
-  reaction = {"did": eline.post.author.did,
-              "handle": eline.post.author.handle,
-              "displayName": displayName,
-              "created_at": eline.post.indexedAt}
+  params = {"did": eline.post.author.did,
+            "handle": eline.post.author.handle,
+            "displayName": displayName,
+            "created_at": eline.post.indexedAt}
   sql = """
     INSERT INTO reactions (did, handle, displayName, created_at)
               VALUES (:did, :handle, :displayName, :created_at)
   """
   cur = connection.cursor()
-  cur.execute(sql, reaction)
+  cur.execute(sql, params)
   connection.commit()
 
 
-def insert_user_settings(connection, did):
+def get_fortune_counts(connection, did):
+  params = {"did": did}
+  sql = """
+    SELECT COUNT(*) FROM reactions
+      WHERE did = :did
+  """
+  cur = connection.cursor()
+  cur.execute(sql, params)
+  row = cur.fetchone()
+  counts = row[0]
+  return counts
+
+
+def create_user_settings(connection, did):
 
   sql = """
-    INSERT INTO users (did, mode, analyze, points)
-              VALUES (:did, 0, 0, 0)
+    INSERT INTO users (did, mode, analyze, points, all_points)
+              VALUES (:did, 0, 0, 0, 0)
   """
   params = {
       "did": did,
@@ -31,7 +45,7 @@ def insert_user_settings(connection, did):
   connection.commit()
 
 
-def select_user_settings(connection, did):
+def get_user_settings(connection, did):
   sql = """
     SELECT * FROM users WHERE did=:did
   """
@@ -41,21 +55,32 @@ def select_user_settings(connection, did):
   cur = connection.cursor()
   cur.execute(sql, params)
   row = cur.fetchone()
+  settings = {}
+  if row:
+    for key in row.keys():
+      settings[key] = row[key]
+  else:
+    create_user_settings(connection, did)
+    settings = get_user_settings(connection, did)
+
+  return settings
 
 
 def update_user_settings(connection, did, settings):
   sql = """
     UPDATE users SET
-      mode=:mode,
-      analyze=:analyze,
-      points=:points,
-      WHERE did=:did
+      mode = :mode,
+      analyze = :analyze,
+      points = :points,
+      all_points = :all_points
+      WHERE did = :did
   """
   params = {
       "did": did,
-      "mode": settings.mode,
-      "analyze": settings.analyze,
-      "points": settings.points,
+      "mode": settings["mode"],
+      "analyze": settings["analyze"],
+      "points": settings["points"],
+      "all_points": settings["all_points"],
   }
   cur = connection.cursor()
   cur.execute(sql, params)
@@ -97,7 +122,7 @@ def get_did_list(after=None):
 def insert_did_many(connection, did_list):
   cur = connection.cursor()
   cur.executemany("""
-  INSERT OR IGNORE INTO users 
+  INSERT OR IGNORE INTO users
     (did, handle, endpoint, created_at)
     VALUES (?, ?, ?, ?)
   """, did_list)
@@ -221,3 +246,42 @@ def aggregate_users(connection, last_created_at=None):
 
   count = get_user_count(connection)
   return count
+
+
+def put_log(connection, kind, param1="", param2="", param3="", param4=""):
+  params = {
+      "kind": kind,
+      "param1": param1,
+      "param2": param2,
+      "param3": param3,
+      "param4": param4,
+  }
+  sql = """
+    INSERT INTO logs (kind, param1, param2, param3, param4)
+              VALUES (:kind, :param1, :param2, :param3, :param4)
+  """
+  cur = connection.cursor()
+  cur.execute(sql, params)
+  connection.commit()
+
+
+def put_command_log(did, command, param):
+  global connection_logs
+  put_log(connection_logs, kind=1, param1=did, param2=command, param3=param)
+
+
+connection_logs = sqlite3.connect("logs.db")
+connection_logs.row_factory = sqlite3.Row
+cur_logs = connection_logs.cursor()
+
+cur_logs.execute("""
+CREATE TABLE IF NOT EXISTS logs
+  (id INTEGER PRIMARY KEY AUTOINCREMENT,
+   kind INTEGER, /* 0:error log 1:commands */
+   param1 TEXT,
+   param2 TEXT,
+   param3 TEXT,
+   param4 TEXT,
+   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+   )
+""")

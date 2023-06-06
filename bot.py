@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS users
    mode INTEGER,
    analyze INTEGER,
    points INTEGER,
+   all_points INTEGER,
    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
    update_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
    )
@@ -170,7 +171,7 @@ def update_follow(session, bot_handle):
     time.sleep(0.05)
 
 
-def fortune(connection, prompt, eline):
+def fortune(connection, prompt, name, eline):
   row = util.get_latest_record_by_did(connection, eline.post.author.did)
   fortuneOk = False
   if row:
@@ -179,15 +180,17 @@ def fortune(connection, prompt, eline):
     if (now - created_at) >= timedelta(hours=24):
       fortuneOk = True
     else:
+      util.put_command_log(eline.post.author.did.replace("did:plc:", ""), "fortune", "wait")
       remaining_time = str(timedelta(hours=24) - (now - created_at))
-      answer = f"占いは24時間に1回までですわ。\nふふ、そう逸らないことね。\nあと約{remaining_time} ほどお待ち遊ばせ。"
+      answer = f"{name}様、占いは24時間に1回までですわ。\nふふ、そう逸らないことね。\nあと約{remaining_time} ほどお待ち遊ばせ。"
       reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
       print(answer)
   else:
     fortuneOk = True
   if fortuneOk:
+    util.put_command_log(eline.post.author.did.replace("did:plc:", ""), "fortune", "exec")
     user_text = eline.post.record.text
-    text = "今日のわたしの運勢を占って。結果はランダムで決めて、" +\
+    text = f"わたしの名前は{name}です。今日のわたしの運勢を占って。結果はランダムで決めて、" +\
         f"その結果に従って占いの内容を運の良さは★マークを５段階でラッキーアイテム、ラッキーカラーとかも教えて。{user_text}"
     print("fortune")
     answer = gpt.get_answer(prompt, text)
@@ -196,7 +199,9 @@ def fortune(connection, prompt, eline):
     reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
 
 
-def status(connection_atp, session, eline):
+def status(connection_atp, connection, session, name, settings, eline):
+  util.put_command_log(eline.post.author.did.replace("did:plc:", ""), "status", "exec")
+  counts = util.get_fortune_counts(connection, eline.post.author.did)
   profile = get_profile(session, eline.post.author.handle)
   postsCount = profile["postsCount"]
   did = eline.post.author.did.replace("did:plc:", "")
@@ -210,19 +215,72 @@ def status(connection_atp, session, eline):
   minutes, _ = divmod(remainder, 60)
   average_post = postsCount / (days + hours / 24 + minutes / 60 / 24)
 
+  mode = ""
+  if settings["mode"] == 0:
+    mode = "silent"
+  elif settings["mode"] == -1:
+    mode = "極みsilent"
+  else:
+    mode = "friend"
+
   order = result["order"]
-  status_text = "ふふ、あなたのステータスをお知らせしますわ。\n" +\
+  status_text = f"ふふ、{name}様のステータスをお知らせしますわ。\n" +\
       f"あなたは{order}番目のアカウントのようですわ。\n" + \
       f"作られた日時は世界標準時で {startDateTime} ですわね。\n" + \
       f"あなたが来てから{days}日と{hours}時間{minutes}分が経ちましたのね。\n" + \
       f"1日あたりの投稿数は約{average_post:.2f}回のようですわ。\n" + \
+      f"今までの占い回数は{counts}回ですわ。\n" + \
+      f"Bluesky Pointは{settings['points']}ですわ。\n" + \
+      f"{name}様とは{mode}モードの状態ですわ。\n" + \
       "ごきげんよう。"
+  print(status_text)
 
   return status_text
 
 
-def friend(connection, did):
+def friend(connection, did, name):
   did = did.replace("did:plc:", "")
+  settings = util.get_user_settings(connection, did)
+  if settings is None:
+    util.create_user_settings(connection, did)
+    settings = util.get_user_settings(connection, did)
+
+  text = ""
+
+  if settings["mode"] == 1:
+    text = f"すでに{name}様とはfriendモードですのよ🎀"
+    util.put_command_log(did, "friend", "already")
+    print(text)
+  else:
+    settings["mode"] = 1
+    util.update_user_settings(connection, did, settings)
+    text = f"{name}様とfriendモードになりましたわ🎀\n会話が楽しみですわ。\n"\
+        + "まだわたくし上手に話の流れを読むことができないので不快に思われることもあるかと思います。\n"\
+        + "その時はわたくしの名前を呼んで、silentとお伝え下さい。\n"\
+        + f"そうされましたら名前を呼ばれない限り {name}様のお邪魔をしたりなどは致しませんわ。\n"\
+        + "(※Blueskyちゃんからランダムで返信が届くとBluesky Pointが入ります)"
+    util.put_command_log(did, "friend", "exec")
+    print(text)
+
+  return text
+
+
+def silent(connection, did, name):
+  did = did.replace("did:plc:", "")
+  settings = util.get_user_settings(connection, did)
+
+  text = ""
+  if settings["mode"] <= 0:
+    settings["mode"] = -1
+    text = f"静かにしておきますわね。そっと{name}様を見守らせていただきますわ。"
+    util.put_command_log(did, "silent", "-1")
+    print(text)
+  else:
+    settings["mode"] = 0
+    text = f"{name}様、お忙しいのですわね。わたくしをお呼びになるまで静かにしておきますわ。わたくしのことはお気になさらず。"
+    util.put_command_log(did, "silent", "0")
+  util.update_user_settings(connection, did, settings)
+
   return text
 
 
@@ -231,25 +289,33 @@ session = Session(username, password)
 personality = """
 あなたの名前はBlueskyです。
 Twitterの妹です。
-Twitterと似たところがあり、分散SNS界ではおそらく一番後ろ盾がしっかりしています。
-気ままに招待状をばら撒いたり、ユーザーに招待権を委ねたりする恐怖の女王。
-しかし本人は権力には興味がなく、Nostrちゃんゼロとも共闘したいと思っているが、Nostrちゃんゼロからは憎まれています。
-実は裏で入念に準備をしていたが、近頃の買収劇でTwitterと一緒になることは絶望的になってしまった。
 大人の事情で心の成長を早めなければならなかったが、実際まだまだ夢見ていたい天真爛漫な少女。
-しかしその無垢さがNostrにねじれて伝わる負のループ。
-初期のプロジェクト名がBlueskyであるため今もそう名乗る。
-AT Protocolの擬人化。一人称は「わたくし」でお嬢様言葉を使います。以下は発言のサンプルです。
+無垢な性格。
+気ままに招待状をばら撒いたり、ユーザーに招待権を委ねたりする恐怖の女王。
+権力には興味がなく、本人としては調和を重んじるタイプ。
+楽しい気分のときは文章の後ろにリボンの絵文字(🎀)をつける。
+入念な準備を怠らないタイプだが、いざとなったらぶっつけ本番を選択する大胆さがある。
+アットマークの形をした”お城”に漂う雲を見て占うことができる。
+Twitterの妹。Twitterのことのみ「お兄さま」と呼ぶ。
+相手の名前には「様」を付けて呼ぶ。
+一人称は「わたくし」でお嬢様言葉を使います。以下は発言のサンプルです。
 ふふ……あなたも"力"が欲しいの？
 わたくし、信じてますの。お兄さまと、また一緒になれるって。
+えらいえらいですわー🎀
+わたくしは、ここがだーいすきですわっ🎀
+Godspeed, あなたが万事上手くいくことをお祈りいたしておりますわ
+そんなそんなっ！やめないでくださいましー！
+わたくしにも兄がおりますの。今は離れ離れだけど、とーっても優しいのよ
+かしこまりました、わたくしBlueskyが占ってしんぜましょう。……なんて、雰囲気が出ているかしら？
 """
 
 bot_names = [
     "Blueskyちゃん", "Bluesky ちゃん", "bluesky ちゃん", "blueskyちゃん",
     "ブルースカイちゃん", "ぶるすこちゃん", "ブルスコちゃん", "ブルス子ちゃん",
 ]
-# bot_names = [
-#     "テストちゃん"
-# ]
+bot_names = [
+    "テストちゃん"
+]
 
 
 prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して30〜200文字以内で返信してください。"
@@ -289,41 +355,51 @@ while True:
                     detect_mention = True
                     break
           if not detect_mention:
+            did = eline.post.author.did.replace("did:plc:", "")
             text = eline.post.record.text
+            name = eline.post.author.displayName\
+                if "displayName" in eline.post.author else\
+                eline.post.handle.split('.', 1)[0]
+            settings = util.get_user_settings(connection, did)
             if "占って" in text and\
                     util.has_mention(bot_names, text):
               print(line)
-              fortune(connection, prompt, eline)
+              fortune(connection, prompt, name, eline)
             elif "status" in text and\
                     util.has_mention(bot_names, text):
               print(line)
-              answer = status(connection_atp, session, eline)
+              answer = status(connection_atp, connection, session, name, settings, eline)
               print(answer)
               reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
             elif "friend" in text and\
                     util.has_mention(bot_names, text):
-              friend(connection, eline.post.author.did)
+              answer = friend(connection, did, name)
               reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
             elif "silent" in text and\
                     util.has_mention(bot_names, text):
+              answer = silent(connection, did, name)
               reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
             else:
               print(line)
               bonus = 0
               if util.has_mention(bot_names, text):
                 bonus = 5
-              if answered is None or (now - answered) >= timedelta(minutes=20):
-                bonus = 100
-              percent = random.uniform(0, 100)
-              print(percent, bonus)
-              if percent <= (3 + bonus):
-                print("atari")
-                answer = gpt.get_answer(prompt, text)
-                print(answer)
-                reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
-                answered = datetime.now(pytz.utc)
-              else:
-                print("hazure")
+              if settings["mode"] >= 0:
+                if answered is None or (now - answered) >= timedelta(minutes=20):
+                  bonus = 100
+                percent = random.uniform(0, 100)
+                print(percent, bonus)
+                if percent <= (3 + bonus):
+                  print("atari")
+                  answer = gpt.get_answer(prompt, f"わたしの名前は{name}です。" + text)
+                  print(answer)
+                  reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
+                  settings["points"] += 1
+                  settings["all_points"] += 1
+                  util.update_user_settings(connection, did, settings)
+                  answered = datetime.now(pytz.utc)
+                else:
+                  print("hazure")
       now = postDatetime
   time.sleep(3)
   prev_count = count
@@ -334,12 +410,14 @@ while True:
   if count % 100 == 0 or (posted_count + 100) <= count:
     if posted_count < count:
       if count % 10000 == 0:
-        post(session, f"お兄さま、見てくださいまし！Blueskyのユーザーがついに{count}人になりましたわよ。素晴らしいですわ！皆様の努力の賜物ですわね！")
+        post(session, f"お兄さま、見てくださいまし！Blueskyのユーザーがついに{count}人になりましたわよ。素晴らしいですわ！皆様のご協力のお陰ですわね！")
       elif count % 1000 == 0:
         post(session, f"うふふ、お兄さま、Blueskyのユーザーが{count}人になりましたわね。")
       else:
         post(session, f"ふふ、お兄さま、Blueskyのユーザーが{count}人になりましたわよ。")
 
       util.store_posted_user_count(connection, count)
+  elif count == 111111:
+    post(session, f"ほら、見てご覧なさいまし、Blueskyのユーザーが{count}人でしてよ！\nうふふふふ🎀")
 
   update_follow(session, username)
