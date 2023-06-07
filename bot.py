@@ -359,7 +359,7 @@ while True:
             text = eline.post.record.text
             name = eline.post.author.displayName\
                 if "displayName" in eline.post.author else\
-                eline.post.handle.split('.', 1)[0]
+                eline.post.author.handle.split('.', 1)[0]
             settings = util.get_user_settings(connection, did)
             if "占って" in text and\
                     util.has_mention(bot_names, text):
@@ -391,7 +391,20 @@ while True:
                 print(percent, bonus)
                 if percent <= (3 + bonus):
                   print("atari")
-                  answer = gpt.get_answer(prompt, f"わたしの名前は{name}です。" + text)
+                  counts = util.get_fortune_counts(connection, eline.post.author.did)
+                  max_count = max(counts, settings["all_points"])
+                  if max_count == 0:
+                    past = "まだ会話して間もない相手です。"
+                  elif max_count < 5:
+                    past = "何度も会話して慣れてきている相手です。"
+                  elif max_count < 10:
+                    past = "何度も会話してかなり慣れてきている相手です。"
+                  elif max_count < 30:
+                    past = "親密な友達です。"
+                  elif max_count > 100:
+                    past = "親友です。"
+
+                  answer = gpt.get_answer(prompt + f"\n相手の名前は{name}様で、{past}", text)
                   print(answer)
                   reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
                   settings["points"] += 1

@@ -107,7 +107,6 @@ def has_mention(bot_names, text):
     if bot_name in text:
       found = True
       break
-  print("found:", found)
   return found
 
 
