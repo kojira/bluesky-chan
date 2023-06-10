@@ -237,6 +237,14 @@ def fortune(connection, prompt, name, settings, eline):
         if settings["points"] > 0:
           fortuneOk = True
           use_point = True
+        else:
+          util.put_command_log(did, "fortune", "wait")
+          remaining_time = str(timedelta(hours=24) - (now - created_at))
+          answer = f"""{name}様、占いは24時間に1回までですわ。
+ふふ、そう逸らないことね。
+あと約{remaining_time} ほどお待ち遊ばせ。
+まだBluesky Pointがたまっていないようですわ。
+"""
       else:
         util.put_command_log(did, "fortune", "wait")
         remaining_time = str(timedelta(hours=24) - (now - created_at))
