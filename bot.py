@@ -66,11 +66,19 @@ CREATE TABLE IF NOT EXISTS count_post
 """)
 
 
+def login(username, password):
+  session = Session(username, password)
+  print(f"login at:{datetime.now(pytz.utc)}", session)
+  return session
+
+
 def post(session, text):
   session.postBloot(text)
+  # pass
 
 
 def reply_to(session, text, cid, uri):
+  # return
   reply = {
       "cid": cid,
       "uri": uri
@@ -278,13 +286,12 @@ def silent(connection, did, name):
   else:
     settings["mode"] = 0
     text = f"{name}様、お忙しいのですわね。わたくしをお呼びになるまで静かにしておきますわ。わたくしのことはお気になさらず。"
+    print(text)
     util.put_command_log(did, "silent", "0")
   util.update_user_settings(connection, did, settings)
 
   return text
 
-
-session = Session(username, password)
 
 personality = """
 あなたの名前はBlueskyです。
@@ -312,6 +319,7 @@ Godspeed, あなたが万事上手くいくことをお祈りいたしており�
 bot_names = [
     "Blueskyちゃん", "Bluesky ちゃん", "bluesky ちゃん", "blueskyちゃん",
     "ブルースカイちゃん", "ぶるすこちゃん", "ブルスコちゃん", "ブルス子ちゃん",
+    f"@{username}"
 ]
 # bot_names = [
 #     "テストちゃん"
@@ -321,11 +329,16 @@ bot_names = [
 prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して30〜200文字以内で返信してください。"
 
 
-now = datetime.now(pytz.utc)
+session = login(username, password)
+login_time = now = datetime.now(pytz.utc)
 started = now
 answered = None
 count = 0
 while True:
+  if (datetime.now(pytz.utc) - login_time) > timedelta(minutes=1):
+    session = login(username, password)
+    login_time = datetime.now(pytz.utc)
+
   skyline = session.getSkyline(50)
   feed = skyline.json().get('feed')
   sorted_feed = sorted(feed, key=lambda x: parse(x["post"]["indexedAt"]))
@@ -344,75 +357,67 @@ while True:
                      username,
                      eline.post.author.handle,
                      followers=bot_followers):
+        print(line)
         # フォロワのみ反応する
         if "reply" not in eline.post.record and "reason" not in eline:
-          detect_mention = None
-          if "facets" in eline.post.record:
-            for facet in eline.post.record.facets:
-              if "features" in facet:
-                for feature in facet.features:
-                  if "did" in feature:
-                    detect_mention = True
-                    break
-          if not detect_mention:
-            did = eline.post.author.did.replace("did:plc:", "")
-            text = eline.post.record.text
-            name = eline.post.author.displayName\
-                if "displayName" in eline.post.author else\
-                eline.post.author.handle.split('.', 1)[0]
-            settings = util.get_user_settings(connection, did)
-            if "占って" in text and\
-                    util.has_mention(bot_names, text):
-              print(line)
-              fortune(connection, prompt, name, eline)
-            elif "status" in text and\
-                    util.has_mention(bot_names, text):
-              print(line)
-              answer = status(connection_atp, connection, session, name, settings, eline)
-              print(answer)
-              reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
-            elif "friend" in text and\
-                    util.has_mention(bot_names, text):
-              answer = friend(connection, did, name)
-              reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
-            elif "silent" in text and\
-                    util.has_mention(bot_names, text):
-              answer = silent(connection, did, name)
-              reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
-            else:
-              print(line)
-              bonus = 0
-              if util.has_mention(bot_names, text):
-                bonus = 5
-              if settings["mode"] > 0:
-                if answered is None or (now - answered) >= timedelta(minutes=20):
-                  bonus = 100
-                percent = random.uniform(0, 100)
-                print(percent, bonus)
-                if percent <= (3 + bonus):
-                  print("atari")
-                  counts = util.get_fortune_counts(connection, eline.post.author.did)
-                  max_count = max(counts, settings["all_points"])
-                  if max_count == 0:
-                    past = "まだ会話して間もない相手です。"
-                  elif max_count < 5:
-                    past = "何度も会話して慣れてきている相手です。"
-                  elif max_count < 10:
-                    past = "何度も会話してかなり慣れてきている相手です。"
-                  elif max_count < 30:
-                    past = "親密な友達です。"
-                  elif max_count > 100:
-                    past = "親友です。"
+          did = eline.post.author.did.replace("did:plc:", "")
+          text = eline.post.record.text
+          name = eline.post.author.displayName\
+              if "displayName" in eline.post.author else\
+              eline.post.author.handle.split('.', 1)[0]
+          settings = util.get_user_settings(connection, did)
+          if "占って" in text and\
+                  util.has_mention(bot_names, text):
+            print(line)
+            fortune(connection, prompt, name, eline)
+          elif "status" in text and\
+                  util.has_mention(bot_names, text):
+            print(line)
+            answer = status(connection_atp, connection, session, name, settings, eline)
+            print(answer)
+            reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
+          elif "friend" in text and\
+                  util.has_mention(bot_names, text):
+            answer = friend(connection, did, name)
+            reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
+          elif "silent" in text and\
+                  util.has_mention(bot_names, text):
+            answer = silent(connection, did, name)
+            reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
+          else:
+            print(line)
+            bonus = 0
+            if util.has_mention(bot_names, text):
+              bonus = 5
+            if settings["mode"] > 0:
+              if answered is None or (now - answered) >= timedelta(minutes=20):
+                bonus = 100
+              percent = random.uniform(0, 100)
+              print(percent, bonus)
+              if percent <= (3 + bonus):
+                print("atari")
+                counts = util.get_fortune_counts(connection, eline.post.author.did)
+                max_count = max(counts, settings["all_points"])
+                if max_count == 0:
+                  past = "まだ会話して間もない相手です。"
+                elif max_count < 5:
+                  past = "何度も会話して慣れてきている相手です。"
+                elif max_count < 10:
+                  past = "何度も会話してかなり慣れてきている相手です。"
+                elif max_count < 30:
+                  past = "親密な友達です。"
+                elif max_count > 100:
+                  past = "長い付き合いのある親友です。"
 
-                  answer = gpt.get_answer(prompt + f"\n相手の名前は{name}様で、{past}", text)
-                  print(answer)
-                  reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
-                  settings["points"] += 1
-                  settings["all_points"] += 1
-                  util.update_user_settings(connection, did, settings)
-                  answered = datetime.now(pytz.utc)
-                else:
-                  print("hazure")
+                answer = gpt.get_answer(prompt + f"\n相手の名前は{name}様で、{past}", text)
+                print(answer)
+                reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
+                settings["points"] += 1
+                settings["all_points"] += 1
+                util.update_user_settings(connection, did, settings)
+                answered = datetime.now(pytz.utc)
+              else:
+                print("hazure")
       now = postDatetime
   time.sleep(3)
   prev_count = count
