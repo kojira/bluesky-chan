@@ -335,7 +335,7 @@ started = now
 answered = None
 count = 0
 while True:
-  if (datetime.now(pytz.utc) - login_time) > timedelta(minutes=1):
+  if (datetime.now(pytz.utc) - login_time) > timedelta(minutes=60):
     session = login(username, password)
     login_time = datetime.now(pytz.utc)
 
