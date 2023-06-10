@@ -101,12 +101,18 @@ def get_latest_record_by_did(connection, did):
   return row
 
 
-def has_mention(bot_names, text):
+def has_mention(bot_names, eline):
+  text = eline.post.record.text
   found = False
   for bot_name in bot_names:
     if bot_name in text:
       found = True
       break
+    if "reply" in eline:
+      if eline.reply.parent.author.handle == bot_name:
+        found = True
+        break
+
   return found
 
 

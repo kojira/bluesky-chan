@@ -72,22 +72,49 @@ def login(username, password):
   return session
 
 
+def get_did(session, username):
+  response = session.resolveHandle(username)
+  return json.loads(response.text)["did"]
+
+
 def post(session, text):
   session.postBloot(text)
   # pass
 
 
-def reply_to(session, text, cid, uri):
+def reply_to(session, text, eline):
   # return
+  root_cid = None
+  root_uri = None
+  if "reply" in eline:
+    root_cid = eline.reply.root.cid
+    root_uri = eline.reply.root.uri
+
+  if root_cid:
+    root = {
+        "cid": root_cid,
+        "uri": root_uri
+    }
+  else:
+    root = {
+        "cid": eline.post.cid,
+        "uri": eline.post.uri
+    }
+
   reply = {
-      "cid": cid,
-      "uri": uri
+      "cid": eline.post.cid,
+      "uri": eline.post.uri
   }
   reply_ref = {
-      "root": reply,
+      "root": root,
       "parent": reply
   }
-  session.postBloot(text, reply_to=reply_ref)
+  chunk_size = 280
+  for i in range(0, len(text), chunk_size):
+    chunk = text[i:i + chunk_size]
+    response = session.postBloot(chunk, reply_to=reply_ref)
+    reply = json.loads(response.text)
+    reply_ref["parent"] = reply
 
 
 def get_profile(session, handle):
@@ -179,32 +206,64 @@ def update_follow(session, bot_handle):
     time.sleep(0.05)
 
 
-def fortune(connection, prompt, name, eline):
+def get_fortune_text(name, user_text):
+  percent = random.uniform(0, 100)
+  if percent < 50:
+    text = f"私の名前は{name}です。今日のわたしの運勢を占って。結果はランダムで決めて、" +\
+        f"その結果に従って占いの内容を運の良さは★マークを５段階でラッキーアイテム、ラッキーカラーとかも教えて。{user_text}"
+  elif percent < 75:
+    text = f"私の名前は{name}です。私の今日の運勢をトランプ占いしてください。\n{user_text}"
+  elif percent < 90:
+    text = f"私の名前は{name}です。私の今日の運勢をオラクルカードで占ってください。\n{user_text}"
+  else:
+    text = f"私の名前は{name}です。水晶球を持っている占い師になりきって、私の今日の運勢を水晶球占いしてください。\n{user_text}"
+
+  return text
+
+
+def fortune(connection, prompt, name, settings, eline):
   row = util.get_latest_record_by_did(connection, eline.post.author.did)
+  did = eline.post.author.did.replace("did:plc:", "")
   fortuneOk = False
+  use_point = False
+  user_text = eline.post.record.text
   if row:
     now = datetime.now(pytz.utc)
     created_at = parse(row["created_at"])
     if (now - created_at) >= timedelta(hours=24):
       fortuneOk = True
     else:
-      util.put_command_log(eline.post.author.did.replace("did:plc:", ""), "fortune", "wait")
-      remaining_time = str(timedelta(hours=24) - (now - created_at))
-      answer = f"{name}様、占いは24時間に1回までですわ。\nふふ、そう逸らないことね。\nあと約{remaining_time} ほどお待ち遊ばせ。"
-      reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
-      print(answer)
+      if "ポイント消費" in user_text or "ポイントを消費" in user_text:
+        if settings["points"] > 0:
+          fortuneOk = True
+          use_point = True
+      else:
+        util.put_command_log(did, "fortune", "wait")
+        remaining_time = str(timedelta(hours=24) - (now - created_at))
+        answer = f"""{name}様、占いは24時間に1回までですわ。
+ふふ、そう逸らないことね。
+あと約{remaining_time} ほどお待ち遊ばせ。
+もし急ぐ場合にはポイントを消費して占うこともできますわ。
+
+{name}様の残りBluesky pointは{settings["points"]}ね。
+"""
+        reply_to(session, answer, eline)
+        print(answer)
   else:
     fortuneOk = True
   if fortuneOk:
     util.put_command_log(eline.post.author.did.replace("did:plc:", ""), "fortune", "exec")
-    user_text = eline.post.record.text
-    text = f"わたしの名前は{name}です。今日のわたしの運勢を占って。結果はランダムで決めて、" +\
-        f"その結果に従って占いの内容を運の良さは★マークを５段階でラッキーアイテム、ラッキーカラーとかも教えて。{user_text}"
+    text = get_fortune_text(name, user_text)
     print("fortune")
     answer = gpt.get_answer(prompt, text)
     util.record_reaction(connection, eline)
+    if use_point:
+      settings["points"] -= 1
+      answer += f'\n\n{name}様の残りBluesky pointは{settings["points"]}になりましたわね。'
     print(answer)
-    reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
+    reply_to(session, answer, eline)
+    if use_point:
+      util.update_user_settings(connection, did, settings)
 
 
 def status(connection_atp, connection, session, name, settings, eline):
@@ -237,8 +296,9 @@ def status(connection_atp, connection, session, name, settings, eline):
       f"作られた日時は世界標準時で {startDateTime} ですわね。\n" + \
       f"あなたが来てから{days}日と{hours}時間{minutes}分が経ちましたのね。\n" + \
       f"1日あたりの投稿数は約{average_post:.2f}回のようですわ。\n" + \
-      f"今までの占い回数は{counts}回ですわ。\n" + \
-      f"Bluesky Pointは{settings['points']}ですわ。\n" + \
+      f"今までの占い回数は{counts}回、\n" + \
+      f"Bluesky Pointは{settings['points']}、\n" + \
+      f"生涯Bluesky Pointは{settings['all_points']}、\n" + \
       f"{name}様とは{mode}モードの状態ですわ。\n" + \
       "ごきげんよう。"
   print(status_text)
@@ -319,10 +379,11 @@ Godspeed, あなたが万事上手くいくことをお祈りいたしており�
 bot_names = [
     "Blueskyちゃん", "Bluesky ちゃん", "bluesky ちゃん", "blueskyちゃん",
     "ブルースカイちゃん", "ぶるすこちゃん", "ブルスコちゃん", "ブルス子ちゃん",
-    f"@{username}"
+    f"{username}"
 ]
 # bot_names = [
-#     "テストちゃん"
+#     "テストちゃん",
+#     f"{username}"
 # ]
 
 
@@ -330,6 +391,8 @@ prompt = f"これはあなたの人格です。'{personality}'\nこの人格を�
 
 
 session = login(username, password)
+bot_did = get_did(session, username)
+
 login_time = now = datetime.now(pytz.utc)
 started = now
 answered = None
@@ -357,37 +420,52 @@ while True:
                      username,
                      eline.post.author.handle,
                      followers=bot_followers):
-        print(line)
         # フォロワのみ反応する
-        if "reply" not in eline.post.record and "reason" not in eline:
+        if "reason" not in eline:
+          detect_other_mention = False
+          if "facets" in eline.post.record:
+            for facet in eline.post.record.facets:
+              if "features" in facet:
+                for feature in facet.features:
+                  if "did" in feature:
+                    if bot_did != feature["did"]:
+                      detect_other_mention = True
+                      break
+          if detect_other_mention:
+            # 他の人にメンションがある時はスルー
+            now = postDatetime
+            continue
+          print(line)
+
           did = eline.post.author.did.replace("did:plc:", "")
           text = eline.post.record.text
-          name = eline.post.author.displayName\
-              if "displayName" in eline.post.author else\
+          name = eline.post.author.displayName \
+              if "displayName" in eline.post.author else \
               eline.post.author.handle.split('.', 1)[0]
           settings = util.get_user_settings(connection, did)
-          if "占って" in text and\
-                  util.has_mention(bot_names, text):
+          print("has_mention:", util.has_mention(bot_names, eline))
+          if ("占って" in text or "占い" in text) and\
+                  util.has_mention(bot_names, eline):
             print(line)
-            fortune(connection, prompt, name, eline)
+            fortune(connection, prompt, name, settings, eline)
           elif "status" in text and\
-                  util.has_mention(bot_names, text):
+                  util.has_mention(bot_names, eline):
             print(line)
             answer = status(connection_atp, connection, session, name, settings, eline)
             print(answer)
-            reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
+            reply_to(session, answer, eline)
           elif "friend" in text and\
-                  util.has_mention(bot_names, text):
+                  util.has_mention(bot_names, eline):
             answer = friend(connection, did, name)
-            reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
+            reply_to(session, answer, eline.post.cid, eline.post.uri)
           elif "silent" in text and\
-                  util.has_mention(bot_names, text):
+                  util.has_mention(bot_names, eline):
             answer = silent(connection, did, name)
-            reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
+            reply_to(session, answer, eline.post.cid, eline.post.uri)
           else:
             print(line)
             bonus = 0
-            if util.has_mention(bot_names, text):
+            if util.has_mention(bot_names, eline):
               bonus = 5
             if settings["mode"] > 0:
               if answered is None or (now - answered) >= timedelta(minutes=20):
@@ -411,7 +489,7 @@ while True:
 
                 answer = gpt.get_answer(prompt + f"\n相手の名前は{name}様で、{past}", text)
                 print(answer)
-                reply_to(session, answer[:300], eline.post.cid, eline.post.uri)
+                reply_to(session, answer, eline)
                 settings["points"] += 1
                 settings["all_points"] += 1
                 util.update_user_settings(connection, did, settings)
