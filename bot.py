@@ -465,11 +465,11 @@ while True:
           elif "friend" in text and\
                   util.has_mention(bot_names, eline):
             answer = friend(connection, did, name)
-            reply_to(session, answer, eline.post.cid, eline.post.uri)
+            reply_to(session, answer, eline)
           elif "silent" in text and\
                   util.has_mention(bot_names, eline):
             answer = silent(connection, did, name)
-            reply_to(session, answer, eline.post.cid, eline.post.uri)
+            reply_to(session, answer, eline)
           else:
             print(line)
             bonus = 0
