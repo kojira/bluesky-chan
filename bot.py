@@ -486,13 +486,13 @@ while True:
                 max_count = max(counts, settings["all_points"])
                 if max_count == 0:
                   past = "まだ会話して間もない相手です。"
-                elif max_count < 5:
+                elif max_count >= 5:
                   past = "何度も会話して慣れてきている相手です。"
-                elif max_count < 10:
+                elif max_count >= 10:
                   past = "何度も会話してかなり慣れてきている相手です。"
-                elif max_count < 30:
+                elif max_count >= 30:
                   past = "親密な友達です。"
-                elif max_count > 100:
+                elif max_count >= 100:
                   past = "長い付き合いのある親友です。"
 
                 answer = gpt.get_answer(prompt + f"\n相手の名前は{name}様で、{past}", text)
