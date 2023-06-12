@@ -120,7 +120,7 @@ def get_did_list(after=None):
   url = 'https://plc.directory/export'
   if after:
     url += f"?after={after}"
-  response = requests.get(url)
+  response = requests.get(url, timeout=(15, 15))
   return response.text
 
 
