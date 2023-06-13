@@ -218,6 +218,9 @@ def get_fortune_text(name, user_text):
   else:
     text = f"私の名前は{name}です。水晶球を持っている占い師になりきって、私の今日の運勢を水晶球占いしてください。\n{user_text}"
 
+  if "fortune" in user_text:
+    text += "英語で回答してください."
+
   return text
 
 
@@ -452,7 +455,7 @@ while True:
               eline.post.author.handle.split('.', 1)[0]
           settings = util.get_user_settings(connection, did)
           print("has_mention:", util.has_mention(bot_names, eline))
-          if ("占って" in text or "占い" in text) and\
+          if ("占って" in text or "占い" in text or "fortune" in text) and\
                   util.has_mention(bot_names, eline):
             print(line)
             fortune(connection, prompt, name, settings, eline)
