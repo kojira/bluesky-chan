@@ -421,8 +421,12 @@ def silent(connection, did, name):
 
 
 def draw(connection, prompt, name, settings, eline):
+  if settings["points"] < 5:
+    return f"お絵描きはBluesky Pointが5ポイント必要なのですわ。\n{name}様のBluesky Pointは{settings['points']}なので残念ながら足りないのですわ。\nfriendモードでもっとわたくしとお話しましょう🎀", ""
+
   image_path = ""
   user_text = eline.post.record.text
+  did = eline.post.author.did
   print(user_text)
   for bot_name in bot_names:
     # エイリアスを含めて不要な文字を除去
@@ -434,7 +438,7 @@ def draw(connection, prompt, name, settings, eline):
     print(target)
     prompt = f"あなたはsvgで絵を描く才能があります。数々のsvgのコードを書いた経験がある猛者です。どんなものであろうとsvgで表現しようと試みます。{personality}"
     text = f"svgを使って'{target}'を描くコードをください。{target}に含まれる特徴をパーツに分解し、パーツ毎にパーツに合う適切な色をカラフルに塗ってパーツを組み合わせて絵を構成してください。パーツ毎にどこの部分なのかをコメントを入れてください。返信のコードはsvgタグだけにしてください。この作品のBluesky(あなた)らしさがどこに現れているか、どこに苦労したかをsvgタグの後にお嬢様言葉で自信満々に書いてください。"
-
+    util.put_command_log(eline.post.author.did.replace("did:plc:", ""), "draw", "exec")
     answer = gpt.get_answer(prompt, text)
     pattern = r'.*(<svg.*</svg>)(.*)'
     matches = re.findall(pattern, answer, flags=re.DOTALL)
@@ -447,6 +451,9 @@ def draw(connection, prompt, name, settings, eline):
       image_path = f'images/{now}_{eline.post.author.did}.png'
       # SVGからPNGに変換
       cairosvg.svg2png(bytestring=svg, write_to=image_path)
+      settings["points"] -= 5
+      util.update_user_settings(connection, did, settings)
+      answer += f'\n\n{name}様の残りBluesky pointは{settings["points"]}になりましたわ。'
     else:
       print("no match")
   else:
@@ -552,12 +559,12 @@ while True:
                   util.has_mention(bot_names, eline):
             print(line)
             fortune(connection, prompt, name, settings, eline)
-          elif "描いて" in text or "draw" in text and\
+          elif ("描いて" in text or "draw" in text) and\
                   util.has_mention(bot_names, eline):
             print(line)
             answer, image_path = draw(connection, session, name, settings, eline)
             print(answer, image_path)
-            if len(answer) > 0 and len(image_path) > 0:
+            if len(answer) > 0:
               reply_to(session, answer, eline, image_path=image_path)
           elif "status" in text and\
                   util.has_mention(bot_names, eline):
