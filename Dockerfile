@@ -11,7 +11,7 @@ ENV LANG="ja_JP.UTF-8" \
   LANGUAGE="ja_JP:ja" \
   LC_ALL="ja_JP.UTF-8"
 
-RUN apt-get install libpangocairo-1.0-0
+RUN apt-get install -y libpangocairo-1.0-0
 
 RUN pip install --upgrade pip
 COPY ./requirements.txt .
