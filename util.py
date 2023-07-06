@@ -231,12 +231,13 @@ def aggregate_users(connection, last_created_at=None):
     for i, did_json in enumerate(did_json_list):
       # print(did_json)
       did_dict = json.loads(did_json)
+      createdAt = did_dict["createdAt"].replace('T', ' ').replace('Z', '')
       if did_dict["operation"]["type"] == "create":
         endpoint = did_dict["operation"]["service"]
         did_list.append((did_dict["did"].replace("did:plc:", ""),
                         did_dict["operation"]["handle"],
                         endpoint,
-                        did_dict["createdAt"]))
+                        createdAt))
       elif did_dict["operation"]["type"] == "plc_operation":
         if did_dict["operation"]["prev"] is None and \
                 "atproto_pds" in did_dict["operation"]["services"]:
@@ -245,7 +246,7 @@ def aggregate_users(connection, last_created_at=None):
           did_list.append((did_dict["did"].replace("did:plc:", ""),
                           handle,
                           endpoint,
-                          did_dict["createdAt"]))
+                          createdAt))
     if len(did_list) > 0:
       insert_did_many(connection, did_list)
 

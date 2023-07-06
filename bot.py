@@ -5,15 +5,31 @@ import sqlite3
 from atprototools import Session
 from easydict import EasyDict
 import gpt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import pytz
 from dateutil.parser import parse
 import random
 import util
 import json
 import requests
+import re
+import cairosvg
+
 
 connection_atp = sqlite3.connect("atp.db")
+cur = connection_atp.cursor()
+
+cur.execute("""
+CREATE TABLE IF NOT EXISTS users
+  (id INTEGER PRIMARY KEY AUTOINCREMENT,
+   did TEXT UNIQUE,
+   handle TEXT,
+   endpoint TEXT,
+   created_at DATETIME
+   )
+""")
+connection_atp.commit()
+
 
 dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
 load_dotenv(dotenv_path)
@@ -78,12 +94,12 @@ def get_did(session, username):
 
 
 def post(session, text):
+  print(text)
   session.postBloot(text)
   # pass
 
 
-def reply_to(session, text, eline):
-  # return
+def reply_to(session, text, eline, image_path=None):
   root_cid = None
   root_uri = None
   if "reply" in eline:
@@ -112,9 +128,49 @@ def reply_to(session, text, eline):
   chunk_size = 280
   for i in range(0, len(text), chunk_size):
     chunk = text[i:i + chunk_size]
-    response = session.postBloot(chunk, reply_to=reply_ref)
+    if i == 0 and image_path:
+      response = post_image(session, chunk, image_path, reply_to=reply_ref)
+    else:
+      response = session.postBloot(chunk, reply_to=reply_ref)
     reply = json.loads(response.text)
     reply_ref["parent"] = reply
+
+
+def post_image(session, postcontent, image_path, reply_to=None, content_type="image/png"):
+  """Post a bloot."""
+  timestamp = datetime.utcnow()
+  timestamp = timestamp.isoformat().replace('+00:00', 'Z')
+
+  headers = {"Authorization": "Bearer " + session.ATP_AUTH_TOKEN}
+
+  data = {
+      "collection": "app.bsky.feed.post",
+      "$type": "app.bsky.feed.post",
+      "repo": "{}".format(session.DID),
+      "record": {
+          "$type": "app.bsky.feed.post",
+          "createdAt": timestamp,
+          "text": postcontent
+      }
+  }
+
+  if image_path:
+    data['record']['embed'] = {}
+    image_resp = session.uploadBlob(image_path, content_type)
+    data["record"]["embed"]["$type"] = "app.bsky.embed.images"
+    data['record']["embed"]['images'] = [{
+        "alt": "",
+        "image": image_resp.json().get('blob')
+    }]
+  if reply_to:
+    data['record']['reply'] = reply_to
+  resp = requests.post(
+      session.ATP_HOST + "/xrpc/com.atproto.repo.createRecord",
+      json=data,
+      headers=headers
+  )
+
+  return resp
 
 
 def get_profile(session, handle):
@@ -364,6 +420,41 @@ def silent(connection, did, name):
   return text
 
 
+def draw(connection, prompt, name, settings, eline):
+  image_path = ""
+  user_text = eline.post.record.text
+  print(user_text)
+  for bot_name in bot_names:
+    # エイリアスを含めて不要な文字を除去
+    user_text = user_text.replace(bot_name, "")
+  pattern = r'(.*)を?描いて'
+  matches = re.findall(pattern, user_text)
+  if len(matches) > 0:
+    target = matches[0]
+    print(target)
+    prompt = f"あなたはsvgで絵を描く才能があります。数々のsvgのコードを書いた経験がある猛者です。どんなものであろうとsvgで表現しようと試みます。{personality}"
+    text = f"svgを使って'{target}'を描くコードをください。{target}に含まれる特徴をパーツに分解し、パーツ毎にパーツに合う適切な色をカラフルに塗ってパーツを組み合わせて絵を構成してください。パーツ毎にどこの部分なのかをコメントを入れてください。返信のコードはsvgタグだけにしてください。この作品のBluesky(あなた)らしさがどこに現れているか、どこに苦労したかをsvgタグの後にお嬢様言葉で自信満々に書いてください。"
+
+    answer = gpt.get_answer(prompt, text)
+    pattern = r'.*(<svg.*</svg>)(.*)'
+    matches = re.findall(pattern, answer, flags=re.DOTALL)
+    if len(matches) > 0:
+      svg = matches[0][0]
+      print(svg)
+      answer = matches[0][1]
+      print(answer)
+      now = datetime.utcnow()
+      image_path = f'images/{now}_{eline.post.author.did}.png'
+      # SVGからPNGに変換
+      cairosvg.svg2png(bytestring=svg, write_to=image_path)
+    else:
+      print("no match")
+  else:
+    answer = ""
+
+  return answer, image_path
+
+
 personality = """
 あなたの名前はBlueskyです。
 Twitterの妹です。
@@ -390,6 +481,8 @@ Godspeed, あなたが万事上手くいくことをお祈りいたしており�
 bot_names = [
     "Blueskyちゃん", "Bluesky ちゃん", "bluesky ちゃん", "blueskyちゃん",
     "ブルースカイちゃん", "ぶるすこちゃん", "ブルスコちゃん", "ブルス子ちゃん",
+    "Blueskychan", "Bluesky chan", "Bluesky-chan", "bluesky-chan",
+    "bskychan", "Bskychan", "Bsky-chan", "bsky-chan",
     f"{username}"
 ]
 # bot_names = [
@@ -459,6 +552,13 @@ while True:
                   util.has_mention(bot_names, eline):
             print(line)
             fortune(connection, prompt, name, settings, eline)
+          elif "描いて" in text or "draw" in text and\
+                  util.has_mention(bot_names, eline):
+            print(line)
+            answer, image_path = draw(connection, session, name, settings, eline)
+            print(answer, image_path)
+            if len(answer) > 0 and len(image_path) > 0:
+              reply_to(session, answer, eline, image_path=image_path)
           elif "status" in text and\
                   util.has_mention(bot_names, eline):
             print(line)
@@ -496,7 +596,7 @@ while True:
                 elif max_count >= 30:
                   past = "親密な友達です。"
                 elif max_count >= 100:
-                  past = "長い付き合いのある親友です。"
+                  past = "長い付き合いのある親友なので、かしこまらずに素の自分を出せます。"
 
                 answer = gpt.get_answer(prompt + f"\n相手の名前は{name}様で、{past}", text)
                 print(answer)
@@ -514,7 +614,7 @@ while True:
   posted_count = util.get_posted_user_count(connection)
   if prev_count != count:
     print(count)
-  if count % 100 == 0 or (posted_count + 100) <= count:
+  if count % 1000 == 0 or ((posted_count // 1000) * 1000 + 1000) <= count:
     if posted_count < count:
       if count % 10000 == 0:
         post(session, f"お兄さま、見てくださいまし！Blueskyのユーザーがついに{count}人になりましたわよ。素晴らしいですわ！皆様のご協力のお陰ですわね！")
@@ -524,7 +624,7 @@ while True:
         post(session, f"ふふ、お兄さま、Blueskyのユーザーが{count}人になりましたわよ。")
 
       util.store_posted_user_count(connection, count)
-  elif count == 111111:
+  elif count == 333333:
     post(session, f"ほら、見てご覧なさいまし、Blueskyのユーザーが{count}人でしてよ！\nうふふふふ🎀")
 
   update_follow(session, username)
