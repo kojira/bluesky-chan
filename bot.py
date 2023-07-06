@@ -419,13 +419,12 @@ def silent(connection, did, name):
   return text
 
 
-def draw(connection, prompt, name, settings, eline):
+def draw(connection, prompt, name, did, settings, eline):
   if settings["points"] < 5:
     return f"お絵描きはBluesky Pointが5ポイント必要なのですわ。\n{name}様のBluesky Pointは{settings['points']}なので残念ながら足りないのですわ。\nfriendモードでもっとわたくしとお話しましょう🎀", ""
 
   image_path = ""
   user_text = eline.post.record.text
-  did = eline.post.author.did
   print(user_text)
   for bot_name in bot_names:
     # エイリアスを含めて不要な文字を除去
@@ -561,7 +560,7 @@ while True:
           elif ("描いて" in text or "draw" in text) and\
                   util.has_mention(bot_names, eline):
             print(line)
-            answer, image_path = draw(connection, session, name, settings, eline)
+            answer, image_path = draw(connection, session, name, did, settings, eline)
             print(answer, image_path)
             if len(answer) > 0:
               reply_to(session, answer, eline, image_path=image_path)
