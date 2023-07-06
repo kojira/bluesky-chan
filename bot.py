@@ -340,7 +340,7 @@ def status(connection_atp, connection, session, name, settings, eline):
   did = eline.post.author.did.replace("did:plc:", "")
   result = util.get_user_info(connection_atp, did)
   startDateTime = result["created_at"]
-  now = datetime.now(pytz.utc)
+  now = datetime.now()
   parsedStartDateTime = datetime.strptime(startDateTime, "%Y-%m-%d %H:%M:%S.%f")
   time_elapsed = now - parsedStartDateTime
   days = time_elapsed.days
