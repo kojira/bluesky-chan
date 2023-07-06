@@ -453,7 +453,7 @@ def draw(connection, prompt, name, settings, eline):
       cairosvg.svg2png(bytestring=svg, write_to=image_path)
       settings["points"] -= 5
       util.update_user_settings(connection, did, settings)
-      answer += f'\n\n{name}様の残りBluesky pointは{settings["points"]}になりましたわ。'
+      answer += f'\n\n{name}様の残りBluesky pointは{settings["points"]}になりましたわ。\n\n#blueskychandraw'
     else:
       print("no match")
   else:
