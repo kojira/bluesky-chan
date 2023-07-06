@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS users
 """)
 connection_atp.commit()
 
+sqlite3.register_converter('DATETIME', sqlite3.converters['TIMESTAMP'])
 
 dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
 load_dotenv(dotenv_path)
@@ -341,9 +342,8 @@ def status(connection_atp, connection, session, name, settings, eline):
   did = eline.post.author.did.replace("did:plc:", "")
   result = util.get_user_info(connection_atp, did)
   startDateTime = result["created_at"]
-  parsedStartDateTime = parse(startDateTime)
   now = datetime.now(pytz.utc)
-  time_elapsed = now - parsedStartDateTime
+  time_elapsed = now - startDateTime
   days = time_elapsed.days
   hours, remainder = divmod(time_elapsed.seconds, 3600)
   minutes, _ = divmod(remainder, 60)
