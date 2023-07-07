@@ -444,6 +444,7 @@ def draw(connection, prompt, name, did, settings, eline):
       svg = matches[0][0]
       print(svg)
       answer = matches[0][1]
+      answer = answer.replace("</body>", "").replace("</html>", "").strip()
       print(answer)
       now = datetime.utcnow()
       image_path = f'images/{now}_{eline.post.author.did}.png'
