@@ -332,7 +332,7 @@ def fortune(connection, prompt, name, settings, eline):
       # ランダムでBlueskuy Pointを付与
       percent = random.uniform(0, 100)
       if percent < 20:
-        point = random.uniform(1, 10)
+        point = random.randint(1, 10)
         settings["points"] += point
         settings["all_points"] += point
         answer += f'\nあら素敵、Bluesky Pointが{point}ポイント降ってきましたわ🎀'
