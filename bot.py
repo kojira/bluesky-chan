@@ -323,12 +323,25 @@ def fortune(connection, prompt, name, settings, eline):
     print("fortune")
     answer = gpt.get_answer(prompt, text)
     util.record_reaction(connection, eline)
+    update_point = False
     if use_point:
       settings["points"] -= 1
-      answer += f'\n\n{name}様の残りBluesky pointは{settings["points"]}になりましたわね。'
+      answer += f'\n\n{name}様の残りBluesky Pointは{settings["points"]}になりましたわね。'
+      update_point = True
+    else:
+      # ランダムでBlueskuy Pointを付与
+      percent = random.uniform(0, 100)
+      if percent < 20:
+        point = random.uniform(1, 10)
+        settings["points"] += point
+        settings["all_points"] += point
+        answer += f'\nあら素敵、Bluesky Pointが{point}ポイント降ってきましたわ🎀'
+        answer += f'\n{name}様の残りBluesky Pointは{settings["points"]}になりましたわ🎀'
+        update_point = True
+
     print(answer)
     reply_to(session, answer, eline)
-    if use_point:
+    if update_point:
       util.update_user_settings(connection, did, settings)
 
 
