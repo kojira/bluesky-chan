@@ -450,14 +450,14 @@ def draw(connection, prompt, name, did, settings, eline):
     prompt = f"あなたはsvgで絵を描く才能があります。数々のsvgのコードを書いた経験がある猛者です。どんなものであろうとsvgで表現しようと試みます。{personality}"
     text = f"svgを使って'{target}'を描くコードをください。{target}に含まれる特徴をパーツに分解し、パーツ毎にパーツに合う適切な色をカラフルに塗ってパーツを組み合わせて絵を構成してください。パーツ毎にどこの部分なのかをコメントを入れてください。返信のコードはsvgタグだけにしてください。この作品のBluesky(あなた)らしさがどこに現れているか、どこに苦労したかをsvgタグの後にお嬢様言葉で自信満々に書いてください。"
     util.put_command_log(eline.post.author.did.replace("did:plc:", ""), "draw", "exec")
-    answer = gpt.get_answer4(prompt, text)
+    answer = gpt.get_answer(prompt, text)
     pattern = r'.*(<svg.*</svg>)(.*)'
     matches = re.findall(pattern, answer, flags=re.DOTALL)
     if len(matches) > 0:
       svg = matches[0][0]
       print(svg)
       answer = matches[0][1]
-      answer = answer.replace("</body>", "").replace("</html>", "").strip()
+      answer = answer.replace("```", "").replace("</body>", "").replace("</html>", "").strip()
       print(answer)
       now = datetime.utcnow()
       image_path = f'images/{now}_{eline.post.author.did}.png'
