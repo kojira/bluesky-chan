@@ -11,3 +11,9 @@ services:
     working_dir: /var/bot/
     command: python bot.py
     restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "./check_alive.sh" ]
+      interval: 5m
+      timeout: 3s
+      retries: 3
+      start_period: 60s

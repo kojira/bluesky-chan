@@ -14,6 +14,7 @@ import json
 import requests
 import re
 import cairosvg
+from pathlib import Path
 
 
 connection_atp = sqlite3.connect("atp.db")
@@ -629,6 +630,7 @@ while True:
       now = postDatetime
   time.sleep(3)
   prev_count = count
+  Path('./alive').touch()
   count = util.aggregate_users(connection_atp)
   posted_count = util.get_posted_user_count(connection)
   if prev_count != count:
