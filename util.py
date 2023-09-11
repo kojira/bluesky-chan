@@ -224,31 +224,39 @@ def aggregate_users(connection, last_created_at=None):
   if last_created_at is None:
     last_created_at = get_last_created_at(connection)
     # print(last_created_at)
-  did_list_text = get_did_list(last_created_at)
-  did_json_list = did_list_text.split("\n")
   did_list = []
-  if len(did_list_text) > 0:
-    for i, did_json in enumerate(did_json_list):
-      # print(did_json)
-      did_dict = json.loads(did_json)
-      createdAt = did_dict["createdAt"].replace('T', ' ').replace('Z', '')
-      if did_dict["operation"]["type"] == "create":
-        endpoint = did_dict["operation"]["service"]
-        did_list.append((did_dict["did"].replace("did:plc:", ""),
-                        did_dict["operation"]["handle"],
-                        endpoint,
-                        createdAt))
-      elif did_dict["operation"]["type"] == "plc_operation":
-        if did_dict["operation"]["prev"] is None and \
-                "atproto_pds" in did_dict["operation"]["services"]:
-          handle = did_dict["operation"]["alsoKnownAs"][0].replace("at://", "")
-          endpoint = did_dict["operation"]["services"]["atproto_pds"]["endpoint"]
+  while True:
+    did_list_text = get_did_list(last_created_at)
+    did_json_list = did_list_text.split("\n")
+    last_created_at_prev = last_created_at
+    if len(did_list_text) > 0:
+      for i, did_json in enumerate(did_json_list):
+        # print(did_json)
+        did_dict = json.loads(did_json)
+        createdAt = did_dict["createdAt"].replace('T', ' ').replace('Z', '')
+        if did_dict["operation"]["type"] == "create":
+          endpoint = did_dict["operation"]["service"]
           did_list.append((did_dict["did"].replace("did:plc:", ""),
-                          handle,
+                          did_dict["operation"]["handle"],
                           endpoint,
                           createdAt))
-    if len(did_list) > 0:
-      insert_did_many(connection, did_list)
+        elif did_dict["operation"]["type"] == "plc_operation":
+          if did_dict["operation"]["prev"] is None and \
+                  "atproto_pds" in did_dict["operation"]["services"]:
+            handle = did_dict["operation"]["alsoKnownAs"][0].replace("at://", "")
+            endpoint = did_dict["operation"]["services"]["atproto_pds"]["endpoint"]
+            did_list.append((did_dict["did"].replace("did:plc:", ""),
+                            handle,
+                            endpoint,
+                            createdAt))
+      last_created_at = did_dict["createdAt"]
+      print(last_created_at, len(did_list))
+      if last_created_at == last_created_at_prev:
+        break
+    else:
+      break
+  if len(did_list) > 0:
+    insert_did_many(connection, did_list)
 
   count = get_user_count(connection)
   return count
