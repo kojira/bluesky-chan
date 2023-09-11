@@ -637,7 +637,11 @@ while True:
     print(count)
   if count % 1000 == 0 or ((posted_count // 1000) * 1000 + 1000) <= count:
     if posted_count < count:
-      if count % 10000 == 0:
+      if count >= 1000000 == 0 and prev_count < 1000000:
+        post(session, f"お兄さま、お兄さま、大変です！！見てくださいまし！！Blueskyのユーザーがなんと{count}人になりましたわ。感無量ですわ！これからも皆様とご一緒に発展してまいりましょう🎀")
+      elif count >= 100000 == 0:
+        post(session, f"お兄さま、見てくださいまし！！Blueskyのユーザーがついに{count}人になりましたわよ。感無量ですわ🎀")
+      elif count % 10000 == 0:
         post(session, f"お兄さま、見てくださいまし！Blueskyのユーザーがついに{count}人になりましたわよ。素晴らしいですわ！皆様のご協力のお陰ですわね！")
       elif count % 1000 == 0:
         post(session, f"うふふ、お兄さま、Blueskyのユーザーが{count}人になりましたわね。")
