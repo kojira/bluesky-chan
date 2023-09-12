@@ -96,7 +96,7 @@ def get_did(session, username):
 def post(session, text):
   print(text)
   session.postBloot(text)
-  # pass
+  pass
 
 
 def reply_to(session, text, eline, image_path=None):
@@ -131,6 +131,7 @@ def reply_to(session, text, eline, image_path=None):
     if i == 0 and image_path:
       response = post_image(session, chunk, image_path, reply_to=reply_ref)
     else:
+      # print(chunk)
       response = session.postBloot(chunk, reply_to=reply_ref)
     reply = json.loads(response.text)
     reply_ref["parent"] = reply
@@ -216,7 +217,7 @@ def get_follows(session, handle):
   while True:
     response = _get_follows(session, handle, limit=100, cursor=cursor)
     follows = response["follows"]
-    follow_list = [follow["handle"] for follow in follows]
+    follow_list = [follow["did"] for follow in follows]
     all_follow_list.extend(follow_list)
     prev_cursor = cursor
     if "cursor" in response:
@@ -233,7 +234,7 @@ def get_followers(session, handle):
   while True:
     response = _get_followers(session, handle, limit=100, cursor=cursor)
     followers = response["followers"]
-    follower_list = [follower["handle"] for follower in followers]
+    follower_list = [(follower["handle"], follower["did"]) for follower in followers]
     all_follower_list.extend(follower_list)
     prev_cursor = cursor
     if "cursor" in response:
@@ -255,9 +256,10 @@ def update_follow(session, bot_handle):
   bot_follows = get_follows(session, bot_handle)
   bot_followers = get_followers(session, bot_handle)
   # unfollows = [item for item in bot_follows if item not in bot_followers]
-  followbacks = [item for item in bot_followers if item not in bot_follows]
+  followbacks = [item for item in bot_followers if item[1] not in bot_follows]
   for handle in followbacks:
-    response = session.follow(handle)
+    print(f"follow back:{handle}")
+    response = session.follow(username=None, did_of_person_you_wanna_follow=handle[1])
     print(f"follow back:{handle}:{response}")
     time.sleep(0.05)
 
