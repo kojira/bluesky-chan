@@ -245,9 +245,9 @@ def get_followers(session, handle):
   return all_follower_list
 
 
-def is_follower(session, bot_handle, handle, followers):
+def is_follower(session, bot_handle, did, followers):
   folowed = False
-  if handle in followers:
+  if did in followers:
     folowed = True
   return folowed
 
@@ -531,7 +531,8 @@ while True:
   skyline = session.getSkyline(50)
   feed = skyline.json().get('feed')
   sorted_feed = sorted(feed, key=lambda x: parse(x["post"]["indexedAt"]))
-  bot_followers = get_followers(session, username)
+  # bot_followers = get_followers(session, username)
+  # bot_followers = [item[1] for item in bot_followers]
 
   for line in sorted_feed:
     eline = EasyDict(line)
@@ -541,11 +542,14 @@ while True:
     # print(eline.post.indexedAt)
     postDatetime = parse(eline.post.indexedAt)
     if now < postDatetime:
-      print(postDatetime)
-      if is_follower(session,
-                     username,
-                     eline.post.author.handle,
-                     followers=bot_followers):
+      # print(eline)
+      can_reply = False
+      if not eline.post.author.viewer.muted\
+          and not eline.post.author.viewer.blockedBy\
+          and "followedBy" in eline.post.author.viewer\
+          and eline.post.author.did in eline.post.author.viewer.followedBy:
+        can_reply = True
+      if can_reply:
         # フォロワのみ反応する
         if "reason" not in eline:
           detect_other_mention = False
@@ -557,8 +561,11 @@ while True:
                     if bot_did != feature["did"]:
                       detect_other_mention = True
                       break
+          elif "reply" in eline:
+            if eline.reply.parent.author.handle != username:
+              detect_other_mention = True
           if detect_other_mention:
-            # 他の人にメンションがある時はスルー
+            # 他の人にメンション、リプライの場合はスルー
             now = postDatetime
             continue
           print(line)
