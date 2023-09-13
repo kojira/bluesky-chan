@@ -257,11 +257,12 @@ def update_follow(session, bot_handle):
   bot_followers = get_followers(session, bot_handle)
   # unfollows = [item for item in bot_follows if item not in bot_followers]
   followbacks = [item for item in bot_followers if item[1] not in bot_follows]
+  print(f"bot_follows:{len(bot_follows)} bot_followers:{len(bot_followers)}")
   for handle in followbacks:
     print(f"follow back:{handle}")
-    response = session.follow(username=None, did_of_person_you_wanna_follow=handle[1])
-    print(f"follow back:{handle}:{response}")
-    time.sleep(0.05)
+    # response = session.follow(username=None, did_of_person_you_wanna_follow=handle[1])
+    # print(f"follow back:{handle}:{response}")
+    # time.sleep(0.05)
 
 
 def get_fortune_text(name, user_text):
