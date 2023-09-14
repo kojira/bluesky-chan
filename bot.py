@@ -222,7 +222,7 @@ def get_follows(session, handle):
     prev_cursor = cursor
     if "cursor" in response:
       cursor = response["cursor"]
-    if cursor is None or prev_cursor == cursor or len(follow_list) < 100:
+    if cursor is None or prev_cursor == cursor:
       break
 
   return all_follow_list
@@ -239,7 +239,7 @@ def get_followers(session, handle):
     prev_cursor = cursor
     if "cursor" in response:
       cursor = response["cursor"]
-    if cursor is None or prev_cursor == cursor or len(follower_list) < 100:
+    if cursor is None or prev_cursor == cursor:
       break
 
   return all_follower_list
@@ -260,9 +260,9 @@ def update_follow(session, bot_handle):
   print(f"bot_follows:{len(bot_follows)} bot_followers:{len(bot_followers)}")
   for handle in followbacks:
     print(f"follow back:{handle}")
-    # response = session.follow(username=None, did_of_person_you_wanna_follow=handle[1])
-    # print(f"follow back:{handle}:{response}")
-    # time.sleep(0.05)
+    response = session.follow(username=None, did_of_person_you_wanna_follow=handle[1])
+    print(f"follow back:{handle}:{response}")
+    time.sleep(0.05)
 
 
 def get_fortune_text(name, user_text):
