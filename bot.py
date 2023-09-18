@@ -484,7 +484,8 @@ def draw(connection, prompt, name, did, settings, eline):
       util.update_user_settings(connection, did, settings)
       answer += f'\n\n{name}様の残りBluesky pointは{settings["points"]}になりましたわ。\n\n#blueskychandraw'
     else:
-      print("no match")
+      answer = "残念ながら、うまく描けませんでしたわ。ポイントは消費していないのでご安心くださいまし。少し間を空けてからまたお声がけくださいまし。"
+      image_path = None
   else:
     answer = ""
 
