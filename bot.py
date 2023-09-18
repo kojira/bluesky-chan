@@ -83,8 +83,21 @@ CREATE TABLE IF NOT EXISTS count_post
 
 
 def login(username, password):
+  now = datetime.now(pytz.utc)
+  if os.path.exists("login.txt"):
+    with open("login.txt", mode='r') as f:
+      last_line = (f.readlines()[-1]).strip()
+    dt = datetime.fromisoformat(last_line)
+    delta = now - dt
+    if delta < timedelta(minutes=5):
+      wait_time = (timedelta(minutes=5) - delta).total_seconds()
+      print(f"login wait:{wait_time}")
+      time.sleep(wait_time)
+
   session = Session(username, password)
-  print(f"login at:{datetime.now(pytz.utc)}", session)
+  with open("login.txt", mode='a') as f:
+    f.write(f"{now}\n")
+  print(f"login at:{now}", session)
   return session
 
 
@@ -525,7 +538,7 @@ started = now
 answered = None
 count = 0
 while True:
-  if (datetime.now(pytz.utc) - login_time) > timedelta(minutes=30):
+  if (datetime.now(pytz.utc) - login_time) > timedelta(minutes=60):
     session = login(username, password)
     login_time = datetime.now(pytz.utc)
 
