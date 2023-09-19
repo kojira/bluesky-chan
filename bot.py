@@ -227,16 +227,21 @@ def _get_followers(session, handle, limit=100, cursor=None):
 def get_follows(session, handle):
   cursor = None
   all_follow_list = []
-  while True:
-    response = _get_follows(session, handle, limit=100, cursor=cursor)
-    follows = response["follows"]
-    follow_list = [follow["did"] for follow in follows]
-    all_follow_list.extend(follow_list)
-    prev_cursor = cursor
-    if "cursor" in response:
-      cursor = response["cursor"]
-    if cursor is None or prev_cursor == cursor:
-      break
+  try:
+    while True:
+      response = _get_follows(session, handle, limit=100, cursor=cursor)
+      follows = response["follows"]
+      follow_list = [follow["did"] for follow in follows]
+      all_follow_list.extend(follow_list)
+      prev_cursor = cursor
+      if "cursor" in response:
+        cursor = response["cursor"]
+      if cursor is None or prev_cursor == cursor:
+        break
+  except KeyError as e:
+    print(response)
+    print(e)
+    all_follow_list = None
 
   return all_follow_list
 
@@ -244,16 +249,21 @@ def get_follows(session, handle):
 def get_followers(session, handle):
   cursor = None
   all_follower_list = []
-  while True:
-    response = _get_followers(session, handle, limit=100, cursor=cursor)
-    followers = response["followers"]
-    follower_list = [(follower["handle"], follower["did"]) for follower in followers]
-    all_follower_list.extend(follower_list)
-    prev_cursor = cursor
-    if "cursor" in response:
-      cursor = response["cursor"]
-    if cursor is None or prev_cursor == cursor:
-      break
+  try:
+    while True:
+      response = _get_followers(session, handle, limit=100, cursor=cursor)
+      followers = response["followers"]
+      follower_list = [(follower["handle"], follower["did"]) for follower in followers]
+      all_follower_list.extend(follower_list)
+      prev_cursor = cursor
+      if "cursor" in response:
+        cursor = response["cursor"]
+      if cursor is None or prev_cursor == cursor:
+        break
+  except KeyError as e:
+    print(response)
+    print(e)
+    all_follower_list = None
 
   return all_follower_list
 
@@ -268,14 +278,15 @@ def is_follower(session, bot_handle, did, followers):
 def update_follow(session, bot_handle):
   bot_follows = get_follows(session, bot_handle)
   bot_followers = get_followers(session, bot_handle)
-  # unfollows = [item for item in bot_follows if item not in bot_followers]
-  followbacks = [item for item in bot_followers if item[1] not in bot_follows]
-  print(f"bot_follows:{len(bot_follows)} bot_followers:{len(bot_followers)}")
-  for handle in followbacks:
-    print(f"follow back:{handle}")
-    response = session.follow(username=None, did_of_person_you_wanna_follow=handle[1])
-    print(f"follow back:{handle}:{response}")
-    time.sleep(0.05)
+  if bot_follows and bot_followers:
+    # unfollows = [item for item in bot_follows if item not in bot_followers]
+    followbacks = [item for item in bot_followers if item[1] not in bot_follows]
+    print(f"bot_follows:{len(bot_follows)} bot_followers:{len(bot_followers)}")
+    for handle in followbacks:
+      print(f"follow back:{handle}")
+      response = session.follow(username=None, did_of_person_you_wanna_follow=handle[1])
+      print(f"follow back:{handle}:{response}")
+      time.sleep(0.05)
 
 
 def get_fortune_text(name, user_text):
