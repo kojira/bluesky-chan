@@ -722,7 +722,7 @@ while True:
     posted_count = util.get_posted_user_count(connection)
     if prev_count != count:
         print("user count:", count)
-    if 2900000 < count < 3000000:
+    if 2999000 < count < 3000000:
         if count % 100 == 0 or ((posted_count // 100) * 100 + 100) <= count:
             prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して80文字以内で返信してください。"
             text = f"ユーザー数が300万人になるまで100人ずつカウントアップしています。SNSのBlueskyのユーザーが{count}人になり300万人にもう少しであることをBlueskyのユーザーに向けて伝える投稿をしてください。人数は正確認書いてください。"
