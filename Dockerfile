@@ -28,3 +28,11 @@ RUN apt-get install -y zlib1g-dev libjpeg-dev
 RUN pip install --upgrade pip
 COPY ./requirements.txt .
 RUN pip install -r requirements.txt
+
+RUN apt-get install -y git g++
+
+RUN mkdir /var/work
+WORKDIR /var/work
+RUN git clone -b 0.60.0dev0 https://github.com/numba/numba.git
+WORKDIR /var/work/numba
+RUN pip install -e .

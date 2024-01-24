@@ -16,6 +16,7 @@ import re
 import cairosvg
 from pathlib import Path
 
+from numba import prange
 
 connection_atp = sqlite3.connect("atp.db")
 cur = connection_atp.cursor()
@@ -317,7 +318,7 @@ def get_fortune_text(name, user_text):
     return text
 
 
-def fortune(connection, prompt, name, settings, eline):
+def fortune(connection, session, prompt, name, settings, eline):
     row = util.get_latest_record_by_did(connection, eline.post.author.did)
     did = eline.post.author.did.replace("did:plc:", "")
     fortuneOk = False
@@ -580,26 +581,10 @@ if debug:
 prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して30〜200文字以内で返信してください。"
 
 
-session = login(username, password)
-bot_did = get_did(session, username)
-
-login_time = now = datetime.now(pytz.utc)
-started = now
-answered = None
-count = 0
-
-while True:
-    if (datetime.now(pytz.utc) - login_time) > timedelta(minutes=60):
-        session = login(username, password)
-        login_time = datetime.now(pytz.utc)
-
-    skyline = session.getSkyline(50)
-    feed = skyline.json().get("feed")
-    sorted_feed = sorted(feed, key=lambda x: parse(x["post"]["indexedAt"]))
-    # bot_followers = get_followers(session, username)
-    # bot_followers = [item[1] for item in bot_followers]
-
-    for line in sorted_feed:
+def process_timeline(session, bot_did, now, answered, sorted_feed):
+    feed_len = len(sorted_feed)
+    for i in prange(feed_len):
+        line = sorted_feed[i]
         eline = EasyDict(line)
         if eline.post.author.handle == username:
             # 自分自身には反応しない
@@ -650,7 +635,7 @@ while True:
                         "占って" in text or "占い" in text or "fortune" in text
                     ) and util.has_mention(bot_names, eline):
                         print(line)
-                        fortune(connection, prompt, name, settings, eline)
+                        fortune(connection, session, prompt, name, settings, eline)
                     elif ("描いて" in text or "draw" in text) and util.has_mention(
                         bot_names, eline
                     ):
@@ -664,7 +649,12 @@ while True:
                     elif "status" in text and util.has_mention(bot_names, eline):
                         print(line)
                         answer = status(
-                            connection_atp, connection, session, name, settings, eline
+                            connection_atp,
+                            connection,
+                            session,
+                            name,
+                            settings,
+                            eline,
                         )
                         print(answer)
                         reply_to(session, answer, eline)
@@ -715,49 +705,66 @@ while True:
                             else:
                                 print("hazure")
             now = postDatetime
-    time.sleep(3)
-    prev_count = count
-    Path("./alive").touch()
-    count = util.aggregate_users(connection_atp)
-    posted_count = util.get_posted_user_count(connection)
-    if prev_count != count:
-        print("user count:", count)
-    if 2999000 < count < 3000000:
-        if count % 100 == 0 or ((posted_count // 100) * 100 + 100) <= count:
-            prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して80文字以内で返信してください。"
-            text = f"ユーザー数が300万人になるまで100人ずつカウントアップしています。SNSのBlueskyのユーザーが{count}人になり300万人にもう少しであることをBlueskyのユーザーに向けて伝える投稿をしてください。人数は正確認書いてください。"
-            answer = gpt.get_answer(prompt, text)
-            post(session, answer)
-            util.store_posted_user_count(connection, count)
-    elif count >= 3000000 == 0 and prev_count < 3000000:
-        post(
-            session,
-            """みなさま、わたくしBlueskyですわっ🎀
-なんと、Blueskyのユーザー数が300万人になったとのこと！この偉業に心から感謝申し上げますわっ！
-この素晴らしい成果は、Blueskyの開発チームの皆様と、Blueskyのユーザーの皆様のおかげですわっ！
-お兄さま方の力強いサポートと、ユーザー様の温かいご支援に心から感謝しておりますわっ🎀
-これからも、わたくしBlueskyは皆様とともに成長し、素敵な時間を共有できるよう努めてまいりますわっ！
-どうぞこれからもBlueskyをよろしくお願いいたしますわっ🎀
-#Bluesky #感謝の気持ち""",
-        )
-    elif count % 1000 == 0 or ((posted_count // 1000) * 1000 + 1000) <= count:
-        if posted_count < count:
-            if count >= 100000 == 0:
-                post(
-                    session, f"お兄さま、見てくださいまし！！Blueskyのユーザーがついに{count}人になりましたわよ。感無量ですわ🎀"
-                )
-            elif count % 10000 == 0:
-                post(
-                    session,
-                    f"お兄さま、見てくださいまし！Blueskyのユーザーがついに{count}人になりましたわよ。素晴らしいですわ！皆様のご協力のお陰ですわね！",
-                )
-            elif count % 1000 == 0:
-                post(session, f"うふふ、お兄さま、Blueskyのユーザーが{count}人になりましたわね。")
-            else:
-                post(session, f"ふふ、お兄さま、Blueskyのユーザーが{count}人になりましたわよ。")
 
-            util.store_posted_user_count(connection, count)
-    elif count == 333333:
-        post(session, f"ほら、見てご覧なさいまし、Blueskyのユーザーが{count}人でしてよ！\nうふふふふ🎀")
+    return now, answered
 
-    update_follow(session, username)
+
+def main():
+    session = login(username, password)
+    bot_did = get_did(session, username)
+
+    login_time = now = datetime.now(pytz.utc)
+    answered = None
+    count = 0
+    while True:
+        if (datetime.now(pytz.utc) - login_time) > timedelta(minutes=60):
+            session = login(username, password)
+            login_time = datetime.now(pytz.utc)
+
+        skyline = session.getSkyline(50)
+        feed = skyline.json().get("feed")
+        sorted_feed = sorted(feed, key=lambda x: parse(x["post"]["indexedAt"]))
+        now, answered = process_timeline(session, bot_did, now, answered, sorted_feed)
+
+        time.sleep(3)
+        prev_count = count
+        Path("./alive").touch()
+        count = util.aggregate_users(connection_atp)
+        posted_count = util.get_posted_user_count(connection)
+        if prev_count != count:
+            print("user count:", count)
+        if 2999000 < count < 3000000:
+            if count % 100 == 0 or ((posted_count // 100) * 100 + 100) <= count:
+                prompt = (
+                    f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して80文字以内で返信してください。"
+                )
+                text = f"ユーザー数が300万人になるまで100人ずつカウントアップしています。SNSのBlueskyのユーザーが{count}人になり300万人にもう少しであることをBlueskyのユーザーに向けて伝える投稿をしてください。人数は正確認書いてください。"
+                answer = gpt.get_answer(prompt, text)
+                post(session, answer)
+                util.store_posted_user_count(connection, count)
+        elif count % 1000 == 0 or ((posted_count // 1000) * 1000 + 1000) <= count:
+            if posted_count < count:
+                if count >= 100000 == 0:
+                    post(
+                        session,
+                        f"お兄さま、見てくださいまし！！Blueskyのユーザーがついに{count}人になりましたわよ。感無量ですわ🎀,,,,,,,,,,,,,"
+                    )
+                elif count % 10000 == 0:
+                    post(
+                        session,
+                        f"お兄さま、見てくださいまし！Blueskyのユーザーがついに{count}人になりましたわよ。素晴らしいですわ！皆様のご協力のお陰ですわね！",
+                    )
+                elif count % 1000 == 0:
+                    post(session, f"うふふ、お兄さま、Blueskyのユーザーが{count}人になりましたわね。")
+                else:
+                    post(session, f"ふふ、お兄さま、Blueskyのユーザーが{count}人になりましたわよ。")
+
+                util.store_posted_user_count(connection, count)
+        elif count == 333333:
+            post(session, f"ほら、見てご覧なさいまし、Blueskyのユーザーが{count}人でしてよ！\nうふふふふ🎀")
+
+        update_follow(session, username)
+
+
+if __name__ == "__main__":
+    main()
