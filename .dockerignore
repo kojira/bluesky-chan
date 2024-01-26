@@ -1,0 +1,7 @@
+*.db
+*.png
+*.zip
+*.ttf
+analyze/*
+images/*
+Noto_Sans_JP/*
