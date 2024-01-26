@@ -146,7 +146,6 @@ def reply_to(session, text, eline, image_path=None):
         if i == 0 and image_path:
             response = post_image(session, chunk, image_path, reply_to=reply_ref)
         else:
-            print("reply_to3")
             print(chunk)
             response = session.postBloot(chunk, reply_to=reply_ref)
         reply = json.loads(response.text)
@@ -581,7 +580,7 @@ if debug:
 prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して30〜200文字以内で返信してください。"
 
 
-def process_timeline(session, bot_did, now, answered, sorted_feed):
+def process_timeline(session, bot_did, now, answered, sorted_feed, previous_reply_did):
     feed_len = len(sorted_feed)
     for i in prange(feed_len):
         line = sorted_feed[i]
@@ -665,6 +664,10 @@ def process_timeline(session, bot_did, now, answered, sorted_feed):
                         answer = silent(connection, did, name)
                         reply_to(session, answer, eline)
                     else:
+                        if previous_reply_did == eline.post.author.did:
+                            print("skip same user")
+                            now = postDatetime
+                            continue
                         print(line)
                         bonus = 0
                         if util.has_mention(bot_names, eline):
@@ -702,11 +705,12 @@ def process_timeline(session, bot_did, now, answered, sorted_feed):
                                 settings["all_points"] += 1
                                 util.update_user_settings(connection, did, settings)
                                 answered = datetime.now(pytz.utc)
+                                previous_reply_did = eline.post.author.did
                             else:
                                 print("hazure")
             now = postDatetime
 
-    return now, answered
+    return now, answered, previous_reply_did
 
 
 def main():
@@ -715,6 +719,7 @@ def main():
 
     login_time = now = datetime.now(pytz.utc)
     answered = None
+    previous_reply_did = None
     count = 0
     while True:
         if (datetime.now(pytz.utc) - login_time) > timedelta(minutes=60):
@@ -724,7 +729,9 @@ def main():
         skyline = session.getSkyline(50)
         feed = skyline.json().get("feed")
         sorted_feed = sorted(feed, key=lambda x: parse(x["post"]["indexedAt"]))
-        now, answered = process_timeline(session, bot_did, now, answered, sorted_feed)
+        now, answered, previous_reply_did = process_timeline(
+            session, bot_did, now, answered, sorted_feed, previous_reply_did
+        )
 
         time.sleep(3)
         prev_count = count
@@ -747,7 +754,7 @@ def main():
                 if count >= 100000 == 0:
                     post(
                         session,
-                        f"お兄さま、見てくださいまし！！Blueskyのユーザーがついに{count}人になりましたわよ。感無量ですわ🎀,,,,,,,,,,,,,,"
+                        f"お兄さま、見てくださいまし！！Blueskyのユーザーがついに{count}人になりましたわよ。感無量ですわ🎀"
                     )
                 elif count % 10000 == 0:
                     post(
