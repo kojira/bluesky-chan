@@ -36,3 +36,10 @@ WORKDIR /var/work
 RUN git clone -b 0.60.0dev0 https://github.com/numba/numba.git
 WORKDIR /var/work/numba
 RUN pip install -e .
+
+# Font
+RUN apt-get install -y wget fontconfig unzip
+# download Noto Sans JP and register system font
+RUN wget -q https://noto-website-2.storage.googleapis.com/pkgs/NotoSansJP.zip && unzip NotoSansJP.zip -d /usr/share/fonts/noto && rm NotoSansJP.zip
+# refresh font cache
+RUN fc-cache -fv

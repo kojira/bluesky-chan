@@ -498,7 +498,7 @@ def draw(connection, prompt, name, did, settings, eline):
         target = matches[0]
         print(target)
         prompt = f"あなたはsvgで絵を描く才能があります。数々のsvgのコードを書いた経験がある猛者です。どんなものであろうとsvgで表現しようと試みます。{personality}"
-        text = f"svgを使って'{target}'を描くコードをください。{target}に含まれる特徴をパーツに分解し、パーツ毎にパーツに合う適切な色をカラフルに塗ってパーツを組み合わせて絵を構成してください。パーツ毎にどこの部分なのかをコメントを入れてください。返信のコードはsvgタグだけにしてください。この作品のBluesky(あなた)らしさがどこに現れているか、どこに苦労したかをsvgタグの後にお嬢様言葉で自信満々に書いてください。"
+        text = f"svgを使って'{target}'を描くコードをください。{target}に含まれる特徴をパーツに分解し、パーツ毎にパーツに合う適切な色をカラフルに塗ってパーツを組み合わせて絵を構成してください。パーツ毎にどこの部分なのかをコメントを入れてください。返信のコードはsvgタグだけにしてください。この作品のBluesky(あなた)らしさがどこに現れているか、どこに苦労したかをsvgタグの後にお嬢様言葉で自信満々に書いてください。textのfontはNoto Sans JPを使用してください。"
         util.put_command_log(
             eline.post.author.did.replace("did:plc:", ""), "draw", "exec"
         )
@@ -747,7 +747,7 @@ def main():
                 if count >= 100000 == 0:
                     post(
                         session,
-                        f"お兄さま、見てくださいまし！！Blueskyのユーザーがついに{count}人になりましたわよ。感無量ですわ🎀,,,,,,,,,,,,,"
+                        f"お兄さま、見てくださいまし！！Blueskyのユーザーがついに{count}人になりましたわよ。感無量ですわ🎀,,,,,,,,,,,,,,"
                     )
                 elif count % 10000 == 0:
                     post(
