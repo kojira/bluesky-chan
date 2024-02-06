@@ -375,7 +375,9 @@ def fortune(connection, session, prompt, name, settings, eline):
                 point = random.randint(1, 10)
                 settings["points"] += point
                 settings["all_points"] += point
-                answer += f"\nあら素敵、Bluesky Pointが{point}ポイント降ってきましたわ🎀"
+                answer += (
+                    f"\nあら素敵、Bluesky Pointが{point}ポイント降ってきましたわ🎀"
+                )
                 answer += f'\n{name}様の残りBluesky Pointは{settings["points"]}になりましたわ🎀'
                 update_point = True
 
@@ -690,7 +692,9 @@ def process_timeline(session, bot_did, now, answered, sorted_feed, previous_repl
                                 elif max_count >= 5:
                                     past = "何度も会話して慣れてきている相手です。"
                                 elif max_count >= 10:
-                                    past = "何度も会話してかなり慣れてきている相手です。"
+                                    past = (
+                                        "何度も会話してかなり慣れてきている相手です。"
+                                    )
                                 elif max_count >= 30:
                                     past = "親密な友達です。"
                                 elif max_count >= 100:
@@ -742,33 +746,40 @@ def main():
             print("user count:", count)
         if 2999000 < count < 3000000:
             if count % 100 == 0 or ((posted_count // 100) * 100 + 100) <= count:
-                prompt = (
-                    f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して80文字以内で返信してください。"
-                )
+                prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して80文字以内で返信してください。"
                 text = f"ユーザー数が300万人になるまで100人ずつカウントアップしています。SNSのBlueskyのユーザーが{count}人になり300万人にもう少しであることをBlueskyのユーザーに向けて伝える投稿をしてください。人数は正確認書いてください。"
                 answer = gpt.get_answer(prompt, text)
                 post(session, answer)
                 util.store_posted_user_count(connection, count)
-        elif count % 1000 == 0 or ((posted_count // 1000) * 1000 + 1000) <= count:
+        elif count % 10000 == 0 or ((posted_count // 10000) * 10000 + 10000) <= count:
             if posted_count < count:
                 if count >= 100000 == 0:
                     post(
                         session,
-                        f"お兄さま、見てくださいまし！！Blueskyのユーザーがついに{count}人になりましたわよ。感無量ですわ🎀"
+                        f"お兄さま、見てくださいまし！！Blueskyのユーザーがついに{count}人になりましたわよ。感無量ですわ🎀",
                     )
-                elif count % 10000 == 0:
+                elif count % 100000 == 0:
                     post(
                         session,
                         f"お兄さま、見てくださいまし！Blueskyのユーザーがついに{count}人になりましたわよ。素晴らしいですわ！皆様のご協力のお陰ですわね！",
                     )
-                elif count % 1000 == 0:
-                    post(session, f"うふふ、お兄さま、Blueskyのユーザーが{count}人になりましたわね。")
+                elif count % 10000 == 0:
+                    post(
+                        session,
+                        f"うふふ、お兄さま、Blueskyのユーザーが{count}人になりましたわね。",
+                    )
                 else:
-                    post(session, f"ふふ、お兄さま、Blueskyのユーザーが{count}人になりましたわよ。")
+                    post(
+                        session,
+                        f"ふふ、お兄さま、Blueskyのユーザーが{count}人になりましたわよ。",
+                    )
 
                 util.store_posted_user_count(connection, count)
         elif count == 333333:
-            post(session, f"ほら、見てご覧なさいまし、Blueskyのユーザーが{count}人でしてよ！\nうふふふふ🎀")
+            post(
+                session,
+                f"ほら、見てご覧なさいまし、Blueskyのユーザーが{count}人でしてよ！\nうふふふふ🎀",
+            )
 
         update_follow(session, username)
 
