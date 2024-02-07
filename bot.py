@@ -679,10 +679,10 @@ def process_timeline(session, bot_did, now, answered, sorted_feed, previous_repl
                             if answered is None or (now - answered) >= timedelta(
                                 minutes=60
                             ):
-                                bonus = 100 * 100
-                            percent = random.uniform(0, 100) * 100
+                                bonus = 100
+                            percent = random.uniform(0, 100)
                             print(percent, bonus)
-                            if percent <= (10 + bonus):
+                            if percent <= (1 + bonus):
                                 print("atari")
                                 counts = util.get_fortune_counts(
                                     connection, eline.post.author.did
