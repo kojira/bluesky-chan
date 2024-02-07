@@ -562,6 +562,7 @@ bot_names = [
     "bluesky ちゃん",
     "blueskyちゃん",
     "ブルースカイちゃん",
+    "ブルスカちゃん",
     "ぶるすこちゃん",
     "ブルスコちゃん",
     "ブルス子ちゃん",
@@ -687,6 +688,7 @@ def process_timeline(session, bot_did, now, answered, sorted_feed, previous_repl
                                     connection, eline.post.author.did
                                 )
                                 max_count = max(counts, settings["all_points"])
+                                past = "初めての会話相手です。"
                                 if max_count == 0:
                                     past = "まだ会話して間もない相手です。"
                                 elif max_count >= 5:
@@ -744,14 +746,20 @@ def main():
         posted_count = util.get_posted_user_count(connection)
         if prev_count != count:
             print("user count:", count)
-        if 2999000 < count < 3000000:
-            if count % 100 == 0 or ((posted_count // 100) * 100 + 100) <= count:
+        if 3900000 < count < 4000000:
+            if count % 10000 == 0 or ((posted_count // 10000) * 10000 + 10000) <= count:
                 prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して80文字以内で返信してください。"
-                text = f"ユーザー数が300万人になるまで100人ずつカウントアップしています。SNSのBlueskyのユーザーが{count}人になり300万人にもう少しであることをBlueskyのユーザーに向けて伝える投稿をしてください。人数は正確認書いてください。"
+                text = f"ユーザー数が400万人になるまで10000人ずつカウントアップしています。SNSのBlueskyのユーザーが{count}人になり400万人にもう少しであることをBlueskyのユーザーに向けて伝える投稿をしてください。人数は正確認書いてください。"
                 answer = gpt.get_answer(prompt, text)
                 post(session, answer)
                 util.store_posted_user_count(connection, count)
-        elif count % 10000 == 0 or ((posted_count // 10000) * 10000 + 10000) <= count:
+        elif count >= 4000000 and prev_count < 4000000:
+            prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して80文字以内で返信してください。"
+            text = f"SNSのBlueskyのユーザーが{count}人になりました。大変な偉業です。Blueskyの開発チームの人達とBlueskyのユーザーに向けて感謝の言葉を伝える投稿をしてください。"
+            answer = gpt.get_answer(prompt, text)
+            post(session, answer)
+            util.store_posted_user_count(connection, count)
+        elif count % 50000 == 0 or ((posted_count // 50000) * 50000 + 50000) <= count:
             if posted_count < count:
                 if count >= 100000 == 0:
                     post(
@@ -763,7 +771,7 @@ def main():
                         session,
                         f"お兄さま、見てくださいまし！Blueskyのユーザーがついに{count}人になりましたわよ。素晴らしいですわ！皆様のご協力のお陰ですわね！",
                     )
-                elif count % 10000 == 0:
+                elif count % 50000 == 0:
                     post(
                         session,
                         f"うふふ、お兄さま、Blueskyのユーザーが{count}人になりましたわね。",
