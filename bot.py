@@ -727,6 +727,7 @@ def main():
     answered = None
     previous_reply_did = None
     count = 0
+    jaz_count = 0
     while True:
         if (datetime.now(pytz.utc) - login_time) > timedelta(minutes=60):
             session = login(username, password)
@@ -744,50 +745,55 @@ def main():
         Path("./alive").touch()
         count = util.aggregate_users(connection_atp)
         posted_count = util.get_posted_user_count(connection)
+        stats = util.get_stats()
+        jaz_count = stats["total_users"]
         if prev_count != count:
-            print("user count:", count)
-        if 3900000 < count < 4000000:
-            if count % 10000 == 0 or ((posted_count // 10000) * 10000 + 10000) <= count:
+            print("user count:", count, jaz_count)
+        base_low = (jaz_count // 100000) * 100000
+        base_high = (jaz_count // 1000000 + 1) * 1000000
+        if base_low < jaz_count < base_high:
+            if (
+                jaz_count % 10000 == 0
+                or ((posted_count // 10000) * 10000 + 10000) <= jaz_count
+            ):
                 prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して80文字以内で返信してください。"
-                text = f"ユーザー数が400万人になるまで10000人ずつカウントアップしています。SNSのBlueskyのユーザーが{count}人になり400万人にもう少しであることをBlueskyのユーザーに向けて伝える投稿をしてください。人数は正確認書いてください。"
-                answer = gpt.get_answer(prompt, text)
+                text = f"ユーザー数が{base_high}人になるまで10000人ずつカウントアップしています。SNSのBlueskyのユーザーが{jaz_count}人になり{base_high}人にもう少しであることをBlueskyのユーザーに向けて伝える投稿をしてください。人数は正確に書いてください。"
+                answer = gpt.get_answer4(prompt, text)
                 post(session, answer)
                 util.store_posted_user_count(connection, count)
-        elif count >= 4000000 and prev_count < 4000000:
+        elif jaz_count >= base_high and prev_count < base_high:
             prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して80文字以内で返信してください。"
-            text = f"SNSのBlueskyのユーザーが{count}人になりました。大変な偉業です。Blueskyの開発チームの人達とBlueskyのユーザーに向けて感謝の言葉を伝える投稿をしてください。"
-            answer = gpt.get_answer(prompt, text)
+            text = f"SNSのBlueskyのユーザーが{jaz_count}人になりました。大変な偉業です。Blueskyの開発チームの人達とBlueskyのユーザーに向けて感謝の言葉を伝える投稿をしてください。"
+            answer = gpt.get_answer4(prompt, text)
             post(session, answer)
-            util.store_posted_user_count(connection, count)
-        elif count % 50000 == 0 or ((posted_count // 50000) * 50000 + 50000) <= count:
-            if posted_count < count:
-                if count >= 100000 == 0:
+            util.store_posted_user_count(connection, jaz_count)
+        elif (
+            jaz_count % 50000 == 0
+            or ((posted_count // 50000) * 50000 + 50000) <= jaz_count
+        ):
+            if posted_count < jaz_count:
+                if jaz_count >= 100000 == 0:
                     post(
                         session,
-                        f"お兄さま、見てくださいまし！！Blueskyのユーザーがついに{count}人になりましたわよ。感無量ですわ🎀",
+                        f"お兄さま、見てくださいまし！！Blueskyのユーザーがついに{jaz_count}人になりましたわよ。感無量ですわ🎀",
                     )
-                elif count % 100000 == 0:
+                elif jaz_count % 100000 == 0:
                     post(
                         session,
-                        f"お兄さま、見てくださいまし！Blueskyのユーザーがついに{count}人になりましたわよ。素晴らしいですわ！皆様のご協力のお陰ですわね！",
+                        f"お兄さま、見てくださいまし！Blueskyのユーザーがついに{jaz_count}人になりましたわよ。素晴らしいですわ！皆様のご協力のお陰ですわね！",
                     )
-                elif count % 50000 == 0:
+                elif jaz_count % 50000 == 0:
                     post(
                         session,
-                        f"うふふ、お兄さま、Blueskyのユーザーが{count}人になりましたわね。",
+                        f"うふふ、お兄さま、Blueskyのユーザーが{jaz_count}人になりましたわね。",
                     )
                 else:
                     post(
                         session,
-                        f"ふふ、お兄さま、Blueskyのユーザーが{count}人になりましたわよ。",
+                        f"ふふ、お兄さま、Blueskyのユーザーが{jaz_count}人になりましたわよ。",
                     )
 
-                util.store_posted_user_count(connection, count)
-        elif count == 333333:
-            post(
-                session,
-                f"ほら、見てご覧なさいまし、Blueskyのユーザーが{count}人でしてよ！\nうふふふふ🎀",
-            )
+                util.store_posted_user_count(connection, jaz_count)
 
         update_follow(session, username)
 

@@ -336,3 +336,9 @@ CREATE TABLE IF NOT EXISTS logs
    )
 """
 )
+
+
+def get_stats():
+    url = "https://bsky-search.jazco.io/stats"
+    response = requests.get(url, timeout=(15, 15))
+    return response.json()

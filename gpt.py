@@ -42,8 +42,8 @@ def get_answer4(prompt, text):
     error_count = 0
     while answer is None and error_count < 5:
         try:
-            response = openai.ChatCompletion.create(
-                model="gpt-4-0613",
+            response = client.chat.completions.create(
+                model="gpt-4-turbo-preview",
                 messages=[
                     {"role": "system", "content": f"{prompt}"},
                     {"role": "user", "content": f"{text}"},
@@ -53,7 +53,7 @@ def get_answer4(prompt, text):
                 top_p=0.9,
                 timeout=30,
             )
-            answer = response["choices"][0]["message"]["content"]
+            answer = response.choices[0].message.content
 
         except Exception as e:
             trace = traceback.format_exc()
