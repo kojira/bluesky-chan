@@ -157,37 +157,59 @@ def get_last_created_at(connection):
 def get_user_info(connection, did):
     cur = connection.cursor()
     params = {
-        "endpoint": "https://bsky.social",
-        "new_endpoint": "https://%.host.bsky.network",
         "did": did,
     }
     print(did)
 
     query = """
     SELECT created_at FROM users
-      WHERE ((endpoint = :endpoint) OR
-             (endpoint LIKE :new_endpoint)
-            )
-       AND did = :did
-  """
+      WHERE did = :did
+    """
     cur.execute(query, params)
     row = cur.fetchone()
     if row:
         created_at = row[0]
-
         params = {
-            "endpoint": "https://bsky.social",
-            "new_endpoint": "https://%.host.bsky.network",
+            "endpoint": "https://%",
+            "except_endpoint1": "https://stems.social",
+            "except_endpoint2": "%localhost%",
+            "except_endpoint3": "%example.com",
+            "except_endpoint4": "https://",
+            "except_endpoint4": "https:///%",
+            "except_endpoint5": "file://%",
+            "except_endpoint6": "%;%",
+            "except_endpoint7": "%<%",
+            "except_endpoint8": "%>%",
+            "except_endpoint9": "%|%",
+            "except_endpoint10": "%534.bsky.social%",
+            "except_endpoint11": "%test.invalid",
+            "except_endpoint12": "%among.us.gov",
+            "except_endpoint13": "https://na",
+            "except_endpoint14": "https://test2",
             "created_at": created_at,
         }
+
         query = """
-      SELECT COUNT(*) FROM users
-        WHERE ((endpoint = :endpoint) OR
-               (endpoint LIKE :new_endpoint)
-              ) AND
-          created_at <= :created_at
+          SELECT COUNT(*) FROM users
+            WHERE
+              endpoint like :endpoint and
+              endpoint not like :except_endpoint1 and
+              endpoint not LIKE :except_endpoint2 and
+              endpoint not LIKE :except_endpoint3 and
+              endpoint not LIKE :except_endpoint4 and
+              endpoint not LIKE :except_endpoint5 and
+              endpoint not LIKE :except_endpoint6 and
+              endpoint not LIKE :except_endpoint7 and
+              endpoint not LIKE :except_endpoint8 and
+              endpoint not LIKE :except_endpoint9 and
+              endpoint not LIKE :except_endpoint10 and
+              endpoint not LIKE :except_endpoint11 and
+              endpoint not LIKE :except_endpoint12 and
+              endpoint not LIKE :except_endpoint13 and
+              endpoint not LIKE :except_endpoint14 and
+              created_at <= :created_at
         ORDER BY created_at ASC
-    """
+        """
 
         cur.execute(query, params)
         order = cur.fetchone()[0]
@@ -201,15 +223,43 @@ def get_user_info(connection, did):
 def get_user_count(connection):
     cur = connection.cursor()
     params = {
-        "endpoint": "https://bsky.social",
-        "new_endpoint": "https://%.host.bsky.network",
+        "endpoint": "https://%",
+        "except_endpoint1": "https://stems.social",
+        "except_endpoint2": "%localhost%",
+        "except_endpoint3": "%example.com",
+        "except_endpoint4": "https://",
+        "except_endpoint4": "https:///%",
+        "except_endpoint5": "file://%",
+        "except_endpoint6": "%;%",
+        "except_endpoint7": "%<%",
+        "except_endpoint8": "%>%",
+        "except_endpoint9": "%|%",
+        "except_endpoint10": "%534.bsky.social%",
+        "except_endpoint11": "%test.invalid",
+        "except_endpoint12": "%among.us.gov",
+        "except_endpoint13": "https://na",
+        "except_endpoint14": "https://test2",
     }
 
     query = """
     SELECT COUNT(*) FROM users
-      WHERE endpoint = :endpoint or
-            endpoint LIKE :new_endpoint
-  """
+      WHERE 
+            endpoint like :endpoint and
+            endpoint not like :except_endpoint1 and
+            endpoint not LIKE :except_endpoint2 and
+            endpoint not LIKE :except_endpoint3 and
+            endpoint not LIKE :except_endpoint4 and
+            endpoint not LIKE :except_endpoint5 and
+            endpoint not LIKE :except_endpoint6 and
+            endpoint not LIKE :except_endpoint7 and
+            endpoint not LIKE :except_endpoint8 and
+            endpoint not LIKE :except_endpoint9 and
+            endpoint not LIKE :except_endpoint10 and
+            endpoint not LIKE :except_endpoint11 and
+            endpoint not LIKE :except_endpoint12 and
+            endpoint not LIKE :except_endpoint13 and
+            endpoint not LIKE :except_endpoint14
+    """
     cur.execute(query, params)
     row = cur.fetchone()
     count = row[0]
