@@ -186,6 +186,7 @@ def get_user_info(connection, did):
             "except_endpoint12": "%among.us.gov",
             "except_endpoint13": "https://na",
             "except_endpoint14": "https://test2",
+            "except_endpoint15": "https://boobee.blue",
             "created_at": created_at,
         }
 
@@ -207,6 +208,7 @@ def get_user_info(connection, did):
               endpoint not LIKE :except_endpoint12 and
               endpoint not LIKE :except_endpoint13 and
               endpoint not LIKE :except_endpoint14 and
+              endpoint not LIKE :except_endpoint15 and
               created_at <= :created_at
         ORDER BY created_at ASC
         """
@@ -239,6 +241,7 @@ def get_user_count(connection):
         "except_endpoint12": "%among.us.gov",
         "except_endpoint13": "https://na",
         "except_endpoint14": "https://test2",
+        "except_endpoint15": "https://boobee.blue",
     }
 
     query = """
@@ -258,7 +261,8 @@ def get_user_count(connection):
             endpoint not LIKE :except_endpoint11 and
             endpoint not LIKE :except_endpoint12 and
             endpoint not LIKE :except_endpoint13 and
-            endpoint not LIKE :except_endpoint14
+            endpoint not LIKE :except_endpoint14 and
+            endpoint not LIKE :except_endpoint15
     """
     cur.execute(query, params)
     row = cur.fetchone()
