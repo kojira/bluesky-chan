@@ -43,7 +43,7 @@ def get_answer4(prompt, text):
     while answer is None and error_count < 5:
         try:
             response = client.chat.completions.create(
-                model="gpt-4-turbo-preview",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": f"{prompt}"},
                     {"role": "user", "content": f"{text}"},
@@ -51,7 +51,7 @@ def get_answer4(prompt, text):
                 presence_penalty=-0.5,
                 frequency_penalty=-0,
                 top_p=0.9,
-                timeout=30,
+                timeout=120,
             )
             answer = response.choices[0].message.content
 

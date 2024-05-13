@@ -503,7 +503,7 @@ def draw(connection, prompt, name, did, settings, eline):
         util.put_command_log(
             eline.post.author.did.replace("did:plc:", ""), "draw", "exec"
         )
-        answer = gpt.get_answer(prompt, text)
+        answer = gpt.get_answer4(prompt, text)
         pattern = r".*(<svg.*</svg>)(.*)"
         matches = re.findall(pattern, answer, flags=re.DOTALL)
         if len(matches) > 0:
