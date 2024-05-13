@@ -15,6 +15,7 @@ import requests
 import re
 import cairosvg
 from pathlib import Path
+import traceback
 
 from numba import prange
 
@@ -592,129 +593,134 @@ def process_timeline(session, bot_did, now, answered, sorted_feed, previous_repl
             # 自分自身には反応しない
             continue
         # print(eline.post.indexedAt)
-        postDatetime = parse(eline.post.indexedAt)
-        if now < postDatetime:
-            # print(eline)
-            can_reply = False
-            if (
-                not eline.post.author.viewer.muted
-                and not eline.post.author.viewer.blockedBy
-                and "followedBy" in eline.post.author.viewer
-                and eline.post.author.did in eline.post.author.viewer.followedBy
-            ):
-                can_reply = True
-            if can_reply:
-                # フォロワのみ反応する
-                if "reason" not in eline:
-                    detect_other_mention = False
-                    if "facets" in eline.post.record:
-                        for facet in eline.post.record.facets:
-                            if "features" in facet:
-                                for feature in facet.features:
-                                    if "did" in feature:
-                                        if bot_did != feature["did"]:
-                                            detect_other_mention = True
-                                            break
-                    elif "reply" in eline:
-                        if eline.reply.parent.author.handle != username:
-                            detect_other_mention = True
-                    if detect_other_mention:
-                        # 他の人にメンション、リプライの場合はスルー
-                        now = postDatetime
-                        continue
-                    print(line)
-
-                    did = eline.post.author.did.replace("did:plc:", "")
-                    text = eline.post.record.text
-                    name = (
-                        eline.post.author.displayName
-                        if "displayName" in eline.post.author
-                        else eline.post.author.handle.split(".", 1)[0]
-                    )
-                    settings = util.get_user_settings(connection, did)
-                    print("has_mention:", util.has_mention(bot_names, eline))
-                    if (
-                        "占って" in text or "占い" in text or "fortune" in text
-                    ) and util.has_mention(bot_names, eline):
-                        print(line)
-                        fortune(connection, session, prompt, name, settings, eline)
-                    elif ("描いて" in text or "draw" in text) and util.has_mention(
-                        bot_names, eline
-                    ):
-                        print(line)
-                        answer, image_path = draw(
-                            connection, session, name, did, settings, eline
-                        )
-                        print(answer, image_path)
-                        if len(answer) > 0:
-                            reply_to(session, answer, eline, image_path=image_path)
-                    elif "status" in text and util.has_mention(bot_names, eline):
-                        print(line)
-                        answer = status(
-                            connection_atp,
-                            connection,
-                            session,
-                            name,
-                            settings,
-                            eline,
-                        )
-                        print(answer)
-                        reply_to(session, answer, eline)
-                    elif "friend" in text and util.has_mention(bot_names, eline):
-                        answer = friend(connection, did, name)
-                        reply_to(session, answer, eline)
-                    elif "silent" in text and util.has_mention(bot_names, eline):
-                        answer = silent(connection, did, name)
-                        reply_to(session, answer, eline)
-                    else:
-                        if previous_reply_did == eline.post.author.did:
-                            print("skip same user")
+        try:
+            postDatetime = parse(eline.post.indexedAt)
+            if now < postDatetime:
+                # print(eline)
+                can_reply = False
+                if (
+                    not eline.post.author.viewer.muted
+                    and not eline.post.author.viewer.blockedBy
+                    and "followedBy" in eline.post.author.viewer
+                    and eline.post.author.did in eline.post.author.viewer.followedBy
+                ):
+                    can_reply = True
+                if can_reply:
+                    # フォロワのみ反応する
+                    if "reason" not in eline:
+                        detect_other_mention = False
+                        if "facets" in eline.post.record:
+                            for facet in eline.post.record.facets:
+                                if "features" in facet:
+                                    for feature in facet.features:
+                                        if "did" in feature:
+                                            if bot_did != feature["did"]:
+                                                detect_other_mention = True
+                                                break
+                        elif "reply" in eline:
+                            if eline.reply.parent.author.handle != username:
+                                detect_other_mention = True
+                        if detect_other_mention:
+                            # 他の人にメンション、リプライの場合はスルー
                             now = postDatetime
                             continue
                         print(line)
-                        bonus = 0
-                        if util.has_mention(bot_names, eline):
-                            bonus = 5
-                        if settings["mode"] > 0:
-                            if answered is None or (now - answered) >= timedelta(
-                                minutes=60
-                            ):
-                                bonus = 100
-                            percent = random.uniform(0, 100)
-                            print(percent, bonus)
-                            if percent <= (1 + bonus):
-                                print("atari")
-                                counts = util.get_fortune_counts(
-                                    connection, eline.post.author.did
-                                )
-                                max_count = max(counts, settings["all_points"])
-                                past = "初めての会話相手です。"
-                                if max_count == 0:
-                                    past = "まだ会話して間もない相手です。"
-                                elif max_count >= 5:
-                                    past = "何度も会話して慣れてきている相手です。"
-                                elif max_count >= 10:
-                                    past = (
-                                        "何度も会話してかなり慣れてきている相手です。"
-                                    )
-                                elif max_count >= 30:
-                                    past = "親密な友達です。"
-                                elif max_count >= 100:
-                                    past = "長い付き合いのある親友なので、かしこまらずに素の自分を出せます。"
 
-                                answer = gpt.get_answer(
-                                    prompt + f"\n相手の名前は{name}様で、{past}", text
-                                )
-                                print(answer)
-                                reply_to(session, answer, eline)
-                                settings["points"] += 1
-                                settings["all_points"] += 1
-                                util.update_user_settings(connection, did, settings)
-                                answered = datetime.now(pytz.utc)
-                                previous_reply_did = eline.post.author.did
-                            else:
-                                print("hazure")
-            now = postDatetime
+                        did = eline.post.author.did.replace("did:plc:", "")
+                        text = eline.post.record.text
+                        name = (
+                            eline.post.author.displayName
+                            if "displayName" in eline.post.author
+                            else eline.post.author.handle.split(".", 1)[0]
+                        )
+                        settings = util.get_user_settings(connection, did)
+                        print("has_mention:", util.has_mention(bot_names, eline))
+                        if (
+                            "占って" in text or "占い" in text or "fortune" in text
+                        ) and util.has_mention(bot_names, eline):
+                            print(line)
+                            fortune(connection, session, prompt, name, settings, eline)
+                        elif ("描いて" in text or "draw" in text) and util.has_mention(
+                            bot_names, eline
+                        ):
+                            print(line)
+                            answer, image_path = draw(
+                                connection, session, name, did, settings, eline
+                            )
+                            print(answer, image_path)
+                            if len(answer) > 0:
+                                reply_to(session, answer, eline, image_path=image_path)
+                        elif "status" in text and util.has_mention(bot_names, eline):
+                            print(line)
+                            answer = status(
+                                connection_atp,
+                                connection,
+                                session,
+                                name,
+                                settings,
+                                eline,
+                            )
+                            print(answer)
+                            reply_to(session, answer, eline)
+                        elif "friend" in text and util.has_mention(bot_names, eline):
+                            answer = friend(connection, did, name)
+                            reply_to(session, answer, eline)
+                        elif "silent" in text and util.has_mention(bot_names, eline):
+                            answer = silent(connection, did, name)
+                            reply_to(session, answer, eline)
+                        else:
+                            if previous_reply_did == eline.post.author.did:
+                                print("skip same user")
+                                now = postDatetime
+                                continue
+                            print(line)
+                            bonus = 0
+                            if util.has_mention(bot_names, eline):
+                                bonus = 5
+                            if settings["mode"] > 0:
+                                if answered is None or (now - answered) >= timedelta(
+                                    minutes=60
+                                ):
+                                    bonus = 100
+                                percent = random.uniform(0, 100)
+                                print(percent, bonus)
+                                if percent <= (1 + bonus):
+                                    print("atari")
+                                    counts = util.get_fortune_counts(
+                                        connection, eline.post.author.did
+                                    )
+                                    max_count = max(counts, settings["all_points"])
+                                    past = "初めての会話相手です。"
+                                    if max_count == 0:
+                                        past = "まだ会話して間もない相手です。"
+                                    elif max_count >= 5:
+                                        past = "何度も会話して慣れてきている相手です。"
+                                    elif max_count >= 10:
+                                        past = "何度も会話してかなり慣れてきている相手です。"
+                                    elif max_count >= 30:
+                                        past = "親密な友達です。"
+                                    elif max_count >= 100:
+                                        past = "長い付き合いのある親友なので、かしこまらずに素の自分を出せます。"
+
+                                    answer = gpt.get_answer(
+                                        prompt + f"\n相手の名前は{name}様で、{past}",
+                                        text,
+                                    )
+                                    print(answer)
+                                    reply_to(session, answer, eline)
+                                    settings["points"] += 1
+                                    settings["all_points"] += 1
+                                    util.update_user_settings(connection, did, settings)
+                                    answered = datetime.now(pytz.utc)
+                                    previous_reply_did = eline.post.author.did
+                                else:
+                                    print("hazure")
+                now = postDatetime
+        except Exception as e:
+            print(eline)
+            traceback.print_exc()
+            print(repr(e))
+            print(str(e))
 
     return now, answered, previous_reply_did
 
