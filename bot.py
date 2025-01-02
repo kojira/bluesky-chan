@@ -19,6 +19,8 @@ import traceback
 
 from numba import prange
 
+FORTUNE_CYCLE = 8
+
 connection_atp = sqlite3.connect("atp.db")
 cur = connection_atp.cursor()
 
@@ -327,7 +329,7 @@ def fortune(connection, session, prompt, name, settings, eline):
     if row:
         now = datetime.now(pytz.utc)
         created_at = parse(row["created_at"])
-        if (now - created_at) >= timedelta(hours=24):
+        if (now - created_at) >= timedelta(hours=FORTUNE_CYCLE):
             fortuneOk = True
         else:
             if "ポイント消費" in user_text or "ポイントを消費" in user_text:
@@ -336,16 +338,20 @@ def fortune(connection, session, prompt, name, settings, eline):
                     use_point = True
                 else:
                     util.put_command_log(did, "fortune", "wait")
-                    remaining_time = str(timedelta(hours=24) - (now - created_at))
-                    answer = f"""{name}様、占いは24時間に1回までですわ。
+                    remaining_time = str(
+                        timedelta(hours=FORTUNE_CYCLE) - (now - created_at)
+                    )
+                    answer = f"""{name}様、占いは{FORTUNE_CYCLE}時間に1回までですわ。
 ふふ、そう逸らないことね。
 あと約{remaining_time} ほどお待ち遊ばせ。
 まだBluesky Pointがたまっていないようですわ。
 """
             else:
                 util.put_command_log(did, "fortune", "wait")
-                remaining_time = str(timedelta(hours=24) - (now - created_at))
-                answer = f"""{name}様、占いは24時間に1回までですわ。
+                remaining_time = str(
+                    timedelta(hours=FORTUNE_CYCLE) - (now - created_at)
+                )
+                answer = f"""{name}様、占いは{FORTUNE_CYCLE}時間に1回までですわ。
 ふふ、そう逸らないことね。
 あと約{remaining_time} ほどお待ち遊ばせ。
 もし急ぐ場合にはポイントを消費して占うこともできますわ。
