@@ -1,6 +1,7 @@
 import requests
 import json
 import sqlite3
+import traceback
 
 
 def record_reaction(connection, eline):
@@ -300,6 +301,7 @@ def aggregate_users(connection, last_created_at=None):
         last_created_at = get_last_created_at(connection)
         # print(last_created_at)
     did_list = []
+    total = 0
     while True:
         did_list_text = get_did_list(last_created_at)
         did_json_list = did_list_text.split("\n")
@@ -308,38 +310,54 @@ def aggregate_users(connection, last_created_at=None):
             for i, did_json in enumerate(did_json_list):
                 # print(did_json)
                 did_dict = json.loads(did_json)
-                createdAt = did_dict["createdAt"].replace("T", " ").replace("Z", "")
-                if did_dict["operation"]["type"] == "create":
-                    endpoint = did_dict["operation"]["service"]
-                    did_list.append(
-                        (
-                            did_dict["did"].replace("did:plc:", ""),
-                            did_dict["operation"]["handle"],
-                            endpoint,
-                            createdAt,
-                        )
-                    )
-                elif did_dict["operation"]["type"] == "plc_operation":
-                    if (
-                        did_dict["operation"]["prev"] is None
-                        and "atproto_pds" in did_dict["operation"]["services"]
-                    ):
-                        handle = did_dict["operation"]["alsoKnownAs"][0].replace(
-                            "at://", ""
-                        )
-                        endpoint = did_dict["operation"]["services"]["atproto_pds"][
-                            "endpoint"
-                        ]
+                try:
+                    createdAt = did_dict["createdAt"].replace("T", " ").replace("Z", "")
+                    if did_dict["operation"]["type"] == "create":
+                        endpoint = did_dict["operation"]["service"]
                         did_list.append(
                             (
                                 did_dict["did"].replace("did:plc:", ""),
-                                handle,
+                                did_dict["operation"]["handle"],
                                 endpoint,
                                 createdAt,
                             )
                         )
+                    elif did_dict["operation"]["type"] == "plc_operation":
+                        if (
+                            did_dict["operation"]["prev"] is None
+                            and "atproto_pds" in did_dict["operation"]["services"]
+                        ):
+                            if len(did_dict["operation"]["alsoKnownAs"]) > 0:
+                                handle = did_dict["operation"]["alsoKnownAs"][
+                                    0
+                                ].replace("at://", "")
+                                endpoint = did_dict["operation"]["services"][
+                                    "atproto_pds"
+                                ]["endpoint"]
+                                did_list.append(
+                                    (
+                                        did_dict["did"].replace("did:plc:", ""),
+                                        handle,
+                                        endpoint,
+                                        createdAt,
+                                    )
+                                )
+                except Exception as e:
+                    traceback.print_exc()
+                    print(repr(e))
+                    print(str(e))
+                    print("****************")
+                    print(did_dict)
+                    print("****************")
+                    print(did_list_text)
+                    exit(-1)
             last_created_at = did_dict["createdAt"]
-            print(last_created_at, len(did_list))
+            if len(did_list) > 10000:
+                insert_did_many(connection, did_list)
+                total += len(did_list)
+                did_list = []
+            print(last_created_at, total + len(did_list))
+
             if last_created_at == last_created_at_prev:
                 break
         else:
