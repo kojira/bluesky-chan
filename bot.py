@@ -167,7 +167,7 @@ def reply_to(session, text, eline, image_path=None):
         reply_ref["parent"] = reply
     did = eline.post.author.did.replace("did:plc:", "")
     util.insert_user_dialog(connection, did, eline.post.record.text)
-    bot_text = text if image_path else text + " (添付画像あり)"
+    bot_text = text if image_path is None else text + " (添付画像あり)"
     util.insert_bot_dialog(connection, did, bot_text)
 
 
