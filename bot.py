@@ -97,6 +97,18 @@ CREATE TABLE IF NOT EXISTS count_post
 """
 )
 
+cur.execute(
+    """
+CREATE TABLE IF NOT EXISTS dialogs
+  (id INTEGER PRIMARY KEY AUTOINCREMENT,
+   did TEXT,
+   role TEXT,
+   message TEXT,
+   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+   )
+"""
+)
+
 
 def login(username, password):
     now = datetime.now(pytz.utc)
@@ -153,6 +165,10 @@ def reply_to(session, text, eline, image_path=None):
             response = session.postBloot(chunk, reply_to=reply_ref)
         reply = json.loads(response.text)
         reply_ref["parent"] = reply
+    did = eline.post.author.did.replace("did:plc:", "")
+    util.insert_user_dialog(connection, did, eline.post.record.text)
+    bot_text = text if image_path else text + " (添付画像あり)"
+    util.insert_bot_dialog(connection, did, bot_text)
 
 
 def post_image(
@@ -460,6 +476,7 @@ def friend(connection, did, name):
             + "その時はわたくしの名前を呼んで、silentとお伝え下さい。\n"
             + f"そうされましたら名前を呼ばれない限り {name}様のお邪魔をしたりなどは致しませんわ。\n"
             + "(※Blueskyちゃんからランダムで返信が届くとBluesky Pointが入ります)"
+            + "(※Blueskyちゃんに返信するとBluesky Pointを1消費します)"
         )
         util.put_command_log(did, "friend", "exec")
         print(text)
@@ -675,14 +692,20 @@ def process_timeline(session, bot_did, now, answered, sorted_feed, previous_repl
                             answer = silent(connection, did, name)
                             reply_to(session, answer, eline)
                         else:
-                            if previous_reply_did == eline.post.author.did:
-                                print("skip same user")
-                                now = postDatetime
-                                continue
+                            # if previous_reply_did == eline.post.author.did:
+                            #     print("skip same user")
+                            #     now = postDatetime
+                            #     continue
                             print(line)
                             bonus = 0
+                            friend_talk = False
                             if util.has_mention(bot_names, eline):
-                                bonus = 5
+                                if settings["mode"] > 0:
+                                    if settings["points"] > 0:
+                                        bonus = 100
+                                        friend_talk = True
+                                else:
+                                    bonus = 5
                             if settings["mode"] > 0:
                                 if answered is None or (now - answered) >= timedelta(
                                     minutes=60
@@ -708,14 +731,26 @@ def process_timeline(session, bot_did, now, answered, sorted_feed, previous_repl
                                     elif max_count >= 100:
                                         past = "長い付き合いのある親友なので、かしこまらずに素の自分を出せます。"
 
+                                    messages = util.get_recent_dialogs(connection, did)
+                                    print(f"messages:{messages}")
                                     answer = gpt.get_answer(
                                         prompt + f"\n相手の名前は{name}様で、{past}",
                                         text,
+                                        messages,
                                     )
                                     print(answer)
+                                    if friend_talk:
+                                        settings["points"] -= 1
+                                        answer = (
+                                            f"{answer}\n\nBP:{settings['points']}(-1)"
+                                        )
+                                    else:
+                                        settings["points"] += 1
+                                        settings["all_points"] += 1
+                                        answer = (
+                                            f"{answer}\n\nBP:{settings['points']}(+1)"
+                                        )
                                     reply_to(session, answer, eline)
-                                    settings["points"] += 1
-                                    settings["all_points"] += 1
                                     util.update_user_settings(connection, did, settings)
                                     answered = datetime.now(pytz.utc)
                                     previous_reply_did = eline.post.author.did

@@ -2,6 +2,65 @@ import requests
 import json
 import sqlite3
 import traceback
+from datetime import datetime
+
+
+def insert_user_dialog(connection, did, text):
+    params = {
+        "did": did,
+        "role": "user",
+        "message": text,
+    }
+    sql = """
+    INSERT INTO dialogs (did, role, message)
+              VALUES (:did, :role, :message)
+    """
+    cur = connection.cursor()
+    cur.execute(sql, params)
+    connection.commit()
+
+
+def insert_bot_dialog(connection, did, text):
+    params = {
+        "did": did,
+        "role": "assistant",
+        "message": text,
+    }
+    sql = """
+    INSERT INTO dialogs (did, role, message)
+              VALUES (:did, :role, :message)
+    """
+    cur = connection.cursor()
+    cur.execute(sql, params)
+    connection.commit()
+
+
+def get_recent_dialogs(connection, did, limit=20):
+    params = {
+        "did": did,
+        "limit": limit,
+    }
+    sql = """
+    SELECT role, message, created_at
+    FROM dialogs
+    WHERE did = :did
+    ORDER BY created_at DESC
+    LIMIT :limit
+    """
+    cur = connection.cursor()
+    cur.execute(sql, params)
+    rows = cur.fetchall()
+    dialogs = []
+    for row in rows:
+        timestamp = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
+        formatted_date = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        role = row[0]
+        content = f"[{formatted_date}] {row[1]}"
+        dialogs.append({"role": role, "content": content})
+
+    dialogs.reverse()
+
+    return dialogs
 
 
 def record_reaction(connection, eline):
@@ -17,7 +76,7 @@ def record_reaction(connection, eline):
     sql = """
     INSERT INTO reactions (did, handle, displayName, created_at)
               VALUES (:did, :handle, :displayName, :created_at)
-  """
+    """
     cur = connection.cursor()
     cur.execute(sql, params)
     connection.commit()
@@ -28,7 +87,7 @@ def get_fortune_counts(connection, did):
     sql = """
     SELECT COUNT(*) FROM reactions
       WHERE did = :did
-  """
+    """
     cur = connection.cursor()
     cur.execute(sql, params)
     row = cur.fetchone()
@@ -52,7 +111,7 @@ def create_user_settings(connection, did):
 def get_user_settings(connection, did):
     sql = """
     SELECT * FROM users WHERE did=:did
-  """
+    """
     params = {
         "did": did,
     }
@@ -78,7 +137,7 @@ def update_user_settings(connection, did, settings):
       points = :points,
       all_points = :all_points
       WHERE did = :did
-  """
+    """
     params = {
         "did": did,
         "mode": settings["mode"],
@@ -98,7 +157,7 @@ def get_latest_record_by_did(connection, did):
     WHERE did = :did
     ORDER BY created_at DESC
     LIMIT 1
-  """
+    """
     cur = connection.cursor()
     cur.execute(sql, {"did": did})
     row = cur.fetchone()
@@ -132,10 +191,10 @@ def insert_did_many(connection, did_list):
     cur = connection.cursor()
     cur.executemany(
         """
-  INSERT OR IGNORE INTO users
-    (did, handle, endpoint, created_at)
-    VALUES (?, ?, ?, ?)
-  """,
+    INSERT OR IGNORE INTO users
+        (did, handle, endpoint, created_at)
+        VALUES (?, ?, ?, ?)
+    """,
         did_list,
     )
     connection.commit()
@@ -148,7 +207,7 @@ def get_last_created_at(connection):
     FROM users
     ORDER BY created_at DESC
     LIMIT 1
-  """
+    """
     cur = connection.cursor()
     cur.execute(sql)
     row = cur.fetchone()
