@@ -10,17 +10,20 @@ load_dotenv(dotenv_path)
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 
-def get_answer(prompt, text):
+def get_answer(prompt, text, massages=[]):
     answer = None
     error_count = 0
+    massages.extend(
+        [
+            {"role": "system", "content": f"{prompt}"},
+            {"role": "user", "content": f"{text}"},
+        ]
+    )
     while answer is None and error_count < 5:
         try:
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": f"{prompt}"},
-                    {"role": "user", "content": f"{text}"},
-                ],
+                messages=massages,
                 presence_penalty=-0.5,
                 frequency_penalty=-0,
                 top_p=0.9,
