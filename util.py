@@ -35,7 +35,7 @@ def insert_bot_dialog(connection, did, text):
     connection.commit()
 
 
-def get_recent_dialogs(connection, did, limit=20):
+def get_recent_dialogs(connection, did, limit=30):
     params = {
         "did": did,
         "limit": limit,
