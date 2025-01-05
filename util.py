@@ -424,8 +424,8 @@ def aggregate_users(connection, last_created_at=None):
     if len(did_list) > 0:
         insert_did_many(connection, did_list)
 
-    count = get_user_count(connection)
-    return count
+    # count = get_user_count(connection)
+    # return count
 
 
 def put_log(connection, kind, param1="", param2="", param3="", param4=""):

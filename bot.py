@@ -790,6 +790,7 @@ def main():
         time.sleep(3)
         prev_count = jaz_count
         Path("./alive").touch()
+        util.aggregate_users(connection_atp)
         posted_count = util.get_posted_user_count(connection)
         stats = util.get_stats()
         jaz_count = stats["total_users"]
