@@ -796,15 +796,15 @@ def main():
         jaz_count = stats["total_users"]
         if prev_count != count:
             print("user count:", jaz_count)
-        base_low = (jaz_count // 100000) * 100000
-        base_high = (jaz_count // 1000000 + 1) * 1000000
+        base_low = (jaz_count // 1000000) * 1000000
+        base_high = (jaz_count // 10000000 + 1) * 10000000
         if base_low < jaz_count < base_high:
             if (
-                jaz_count % 10000 == 0
-                or ((posted_count // 10000) * 10000 + 10000) <= jaz_count
+                jaz_count % 100000 == 0
+                or ((posted_count // 100000) * 100000 + 100000) <= jaz_count
             ):
                 prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して80文字以内で返信してください。"
-                text = f"ユーザー数が{base_high}人になるまで10000人ずつカウントアップしています。SNSのBlueskyのユーザーが{jaz_count}人になり{base_high}人にもう少しであることをBlueskyのユーザーに向けて伝える投稿をしてください。人数は正確に書いてください。"
+                text = f"ユーザー数が{base_high}人になるまで100000人ずつカウントアップしています。SNSのBlueskyのユーザーが{jaz_count}人になり{base_high}人にもう少しであることをBlueskyのユーザーに向けて伝える投稿をしてください。人数は正確に書いてください。"
                 answer = gpt.get_answer4(prompt, text)
                 post(session, answer)
                 util.store_posted_user_count(connection, count)
