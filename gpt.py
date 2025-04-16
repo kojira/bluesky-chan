@@ -22,7 +22,7 @@ def get_answer(prompt, text, massages=[]):
     while answer is None and error_count < 5:
         try:
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4.1-mini",
                 messages=massages,
                 presence_penalty=-0.5,
                 frequency_penalty=-0,
@@ -46,7 +46,7 @@ def get_answer4(prompt, text):
     while answer is None and error_count < 5:
         try:
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4.1",
                 messages=[
                     {"role": "system", "content": f"{prompt}"},
                     {"role": "user", "content": f"{text}"},
