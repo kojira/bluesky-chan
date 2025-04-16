@@ -17,8 +17,6 @@ import cairosvg
 from pathlib import Path
 import traceback
 
-from numba import prange
-
 FORTUNE_CYCLE = 8
 
 connection_atp = sqlite3.connect("atp.db")
@@ -609,7 +607,7 @@ prompt = f"これはあなたの人格です。'{personality}'\nこの人格を�
 
 def process_timeline(session, bot_did, now, answered, sorted_feed, previous_reply_did):
     feed_len = len(sorted_feed)
-    for i in prange(feed_len):
+    for i in range(feed_len):
         line = sorted_feed[i]
         eline = EasyDict(line)
         if eline.post.author.handle == username:
@@ -767,35 +765,87 @@ def process_timeline(session, bot_did, now, answered, sorted_feed, previous_repl
     return now, answered, previous_reply_did
 
 
-def main():
-    session = login(username, password)
-    bot_did = get_did(session, username)
+import threading
 
-    login_time = now = datetime.now(pytz.utc)
-    answered = None
-    previous_reply_did = None
-    count = 0
-    jaz_count = 0
+
+def aggregate_and_count():
+    if not hasattr(aggregate_and_count, "prev_count"):
+        aggregate_and_count.prev_count = 0
+    Path("./alive").touch()
+    util.aggregate_users(connection_atp)
+    posted_count = util.get_posted_user_count(connection)
+    stats = util.get_stats()
+    jaz_count = stats["total_users"]
+    if aggregate_and_count.prev_count != jaz_count:
+        print("user count:", jaz_count)
+    base_low = (jaz_count // 1000000) * 1000000
+    base_high = (jaz_count // 10000000 + 1) * 10000000
+    if base_low < jaz_count < base_high:
+        if (
+            jaz_count % 100000 == 0
+            or ((posted_count // 100000) * 100000 + 100000) <= jaz_count
+        ):
+            prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して80文字以内で返信してください。"
+            text = f"ユーザー数が{base_high}人になるまで100000人ずつカウントアップしています。SNSのBlueskyのユーザーが{jaz_count}人になり{base_high}人にもう少しであることをBlueskyのユーザーに向けて伝える投稿をしてください。人数は正確に書いてください。"
+            answer = gpt.get_answer4(prompt, text)
+            post(session, answer)
+            util.store_posted_user_count(connection, jaz_count)
+    elif jaz_count >= base_high:
+        prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して80文字以内で返信してください。"
+        text = f"SNSのBlueskyのユーザーが{jaz_count}人になりました。大変な偉業です。Blueskyの開発チームの人達とBlueskyのユーザーに向けて感謝の言葉を伝える投稿をしてください。"
+        answer = gpt.get_answer4(prompt, text)
+        post(session, answer)
+        util.store_posted_user_count(connection, jaz_count)
+    elif (
+        jaz_count % 50000 == 0 or ((posted_count // 50000) * 50000 + 50000) <= jaz_count
+    ):
+        if posted_count < jaz_count:
+            if jaz_count >= 100000 == 0:
+                post(
+                    session,
+                    f"お兄さま、見てくださいまし！！Blueskyのユーザーがついに{jaz_count}人になりましたわよ。感無量ですわ🎀",
+                )
+            elif jaz_count % 100000 == 0:
+                post(
+                    session,
+                    f"お兄さま、見てくださいまし！Blueskyのユーザーがついに{jaz_count}人になりましたわよ。素晴らしいですわ！皆様のご協力のお陰ですわね！",
+                )
+            elif jaz_count % 50000 == 0:
+                post(
+                    session,
+                    f"うふふ、お兄さま、Blueskyのユーザーが{jaz_count}人になりましたわね。",
+                )
+            else:
+                post(
+                    session,
+                    f"ふふ、お兄さま、Blueskyのユーザーが{jaz_count}人になりましたわよ。",
+                )
+
+            util.store_posted_user_count(connection, jaz_count)
+
+    aggregate_and_count.prev_count = jaz_count
+
+
+import threading
+
+
+def aggregate_and_count():
+    if not hasattr(aggregate_and_count, "prev_count"):
+        aggregate_and_count.prev_count = 0
+    # スレッド内で新たにDBコネクションを作成
+    local_connection_atp = sqlite3.connect("atp.db")
+    local_connection_atp.row_factory = sqlite3.Row
+    # bluesky_bot.dbとは別にcount_post専用DBを用意
+    local_count_post_connection = sqlite3.connect("count_post.db")
+    local_count_post_connection.row_factory = sqlite3.Row
+
     while True:
-        if (datetime.now(pytz.utc) - login_time) > timedelta(minutes=60):
-            session = login(username, password)
-            login_time = datetime.now(pytz.utc)
-
-        skyline = session.getSkyline(50)
-        feed = skyline.json().get("feed")
-        sorted_feed = sorted(feed, key=lambda x: parse(x["post"]["indexedAt"]))
-        now, answered, previous_reply_did = process_timeline(
-            session, bot_did, now, answered, sorted_feed, previous_reply_did
-        )
-
-        time.sleep(3)
-        prev_count = jaz_count
         Path("./alive").touch()
-        util.aggregate_users(connection_atp)
-        posted_count = util.get_posted_user_count(connection)
+        util.aggregate_users(local_connection_atp)
+        posted_count = util.get_posted_user_count(local_count_post_connection)
         stats = util.get_stats()
         jaz_count = stats["total_users"]
-        if prev_count != count:
+        if aggregate_and_count.prev_count != jaz_count:
             print("user count:", jaz_count)
         base_low = (jaz_count // 1000000) * 1000000
         base_high = (jaz_count // 10000000 + 1) * 10000000
@@ -808,13 +858,13 @@ def main():
                 text = f"ユーザー数が{base_high}人になるまで100000人ずつカウントアップしています。SNSのBlueskyのユーザーが{jaz_count}人になり{base_high}人にもう少しであることをBlueskyのユーザーに向けて伝える投稿をしてください。人数は正確に書いてください。"
                 answer = gpt.get_answer4(prompt, text)
                 post(session, answer)
-                util.store_posted_user_count(connection, jaz_count)
-        elif jaz_count >= base_high and prev_count < base_high:
+                util.store_posted_user_count(local_count_post_connection, jaz_count)
+        elif jaz_count >= base_high:
             prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して80文字以内で返信してください。"
             text = f"SNSのBlueskyのユーザーが{jaz_count}人になりました。大変な偉業です。Blueskyの開発チームの人達とBlueskyのユーザーに向けて感謝の言葉を伝える投稿をしてください。"
             answer = gpt.get_answer4(prompt, text)
             post(session, answer)
-            util.store_posted_user_count(connection, jaz_count)
+            util.store_posted_user_count(local_count_post_connection, jaz_count)
         elif (
             jaz_count % 50000 == 0
             or ((posted_count // 50000) * 50000 + 50000) <= jaz_count
@@ -841,9 +891,39 @@ def main():
                         f"ふふ、お兄さま、Blueskyのユーザーが{jaz_count}人になりましたわよ。",
                     )
 
-                util.store_posted_user_count(connection, jaz_count)
+                util.store_posted_user_count(local_count_post_connection, jaz_count)
 
-        update_follow(session, username)
+        aggregate_and_count.prev_count = jaz_count
+        time.sleep(60)
+
+
+def main():
+    global session
+    session = login(username, password)
+    bot_did = get_did(session, username)
+
+    login_time = now = datetime.now(pytz.utc)
+    answered = None
+    previous_reply_did = None
+
+    # 集計スレッドを常駐で起動
+    aggregate_thread = threading.Thread(target=aggregate_and_count, daemon=True)
+    aggregate_thread.start()
+
+    while True:
+        if (datetime.now(pytz.utc) - login_time) > timedelta(minutes=60):
+            session = login(username, password)
+            login_time = datetime.now(pytz.utc)
+
+        skyline = session.getSkyline(50)
+        feed = skyline.json().get("feed")
+        sorted_feed = sorted(feed, key=lambda x: parse(x["post"]["indexedAt"]))
+        now, answered, previous_reply_did = process_timeline(
+            session, bot_did, now, answered, sorted_feed, previous_reply_did
+        )
+
+        # 1回の実行後に3秒スリープ
+        time.sleep(3)
 
 
 if __name__ == "__main__":
