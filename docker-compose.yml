@@ -9,7 +9,7 @@ services:
       - "./:/var/bot/"
     tty: true
     working_dir: /var/bot/
-    command: python bot.py
+    command: python -u bot.py
     restart: always
     healthcheck:
       test: [ "CMD-SHELL", "./check_alive.sh" ]
