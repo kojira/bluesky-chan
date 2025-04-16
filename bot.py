@@ -740,10 +740,11 @@ def process_timeline(session, bot_did, now, answered, sorted_feed, previous_repl
                                     )
                                     print(answer)
                                     if friend_talk:
-                                        settings["points"] -= 1
-                                        answer = (
-                                            f"{answer}\n\nBP:{settings['points']}(-1)"
-                                        )
+                                        # settings["points"] -= 1
+                                        # answer = (
+                                        #     f"{answer}\n\nBP:{settings['points']}(-1)"
+                                        # )
+                                        pass
                                     else:
                                         settings["points"] += 1
                                         settings["all_points"] += 1
