@@ -604,7 +604,7 @@ if debug:
     bot_names = ["テストちゃん", f"{username}"]
 
 
-prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して30〜200文字以内で返信してください。"
+prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して30〜200文字以内で返信してください。回答に過去の会話ログにある日時は含めないでください"
 
 
 def process_timeline(session, bot_did, now, answered, sorted_feed, previous_reply_did):
