@@ -107,6 +107,29 @@ CREATE TABLE IF NOT EXISTS dialogs
 """
 )
 
+cur.execute(
+    """
+CREATE TABLE IF NOT EXISTS notification_cursor
+  (id INTEGER PRIMARY KEY AUTOINCREMENT,
+   last_processed_at DATETIME NOT NULL,
+   cursor TEXT,
+   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+   )
+"""
+)
+
+cur.execute(
+    """
+CREATE TRIGGER IF NOT EXISTS update_notification_cursor_timestamp
+AFTER UPDATE ON notification_cursor
+FOR EACH ROW
+BEGIN
+  UPDATE notification_cursor SET updated_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
+END;
+"""
+)
+
 
 def login(username, password):
     now = datetime.now(pytz.utc)
@@ -131,6 +154,80 @@ def login(username, password):
 def get_did(session, username):
     response = session.resolveHandle(username)
     return json.loads(response.text)["did"]
+
+
+def get_last_processed_notification_time():
+    """最後に処理したNotificationの時刻を取得"""
+    try:
+        cur = connection.cursor()
+        cur.execute(
+            "SELECT last_processed_at FROM notification_cursor ORDER BY id DESC LIMIT 1"
+        )
+        row = cur.fetchone()
+        if row:
+            return parse(row["last_processed_at"])
+        else:
+            # 初回起動時：現在時刻を返す
+            return datetime.now(pytz.utc)
+    except Exception as e:
+        print(f"Error getting last processed notification time: {e}")
+        return datetime.now(pytz.utc)
+
+
+def update_last_processed_notification_time(processed_at):
+    """最後に処理したNotificationの時刻を更新"""
+    try:
+        cur = connection.cursor()
+        # 既存レコードがあるかチェック
+        cur.execute("SELECT id FROM notification_cursor ORDER BY id DESC LIMIT 1")
+        row = cur.fetchone()
+
+        if row:
+            # 更新
+            cur.execute(
+                "UPDATE notification_cursor SET last_processed_at = ? WHERE id = ?",
+                (processed_at.isoformat(), row["id"]),
+            )
+        else:
+            # 新規作成
+            cur.execute(
+                "INSERT INTO notification_cursor (last_processed_at) VALUES (?)",
+                (processed_at.isoformat(),),
+            )
+        connection.commit()
+    except Exception as e:
+        print(f"Error updating last processed notification time: {e}")
+
+
+def get_notifications(session, limit=50, cursor=None):
+    """Bluesky Notificationを取得する"""
+    try:
+        headers = {"Authorization": "Bearer " + session.ATP_AUTH_TOKEN}
+
+        url = (
+            session.ATP_HOST
+            + f"/xrpc/app.bsky.notification.listNotifications?limit={limit}"
+        )
+        if cursor:
+            url += f"&cursor={cursor}"
+
+        response = requests.get(url, headers=headers)
+
+        if response.status_code == 200:
+            data = json.loads(response.text)
+            return data
+        else:
+            print(
+                f"[ERROR] Failed to get notifications: {response.status_code}, "
+                f"{response.text}"
+            )
+            return None
+    except Exception as e:
+        print(f"[ERROR] Exception in get_notifications: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return None
 
 
 def post(session, text):
@@ -521,11 +618,11 @@ def draw(connection, prompt, name, did, settings, eline):
         target = matches[0]
         print(target)
         prompt = f"あなたはsvgで絵を描く才能があります。数々のsvgのコードを書いた経験がある猛者です。どんなものであろうとsvgで表現しようと試みます。{personality}"
-        text = f"svgを使って'{target}'を描くコードをください。{target}に含まれる特徴をパーツに分解し、パーツ毎にパーツに合う適切な色をカラフルに塗ってパーツを組み合わせて絵を構成してください。パーツ毎にどこの部分なのかをコメントを入れてください。返信のコードはsvgタグだけにしてください。この作品のBluesky(あなた)らしさがどこに現れているか、どこに苦労したかをsvgタグの後にお嬢様言葉で自信満々に書いてください。textのfontはNoto Sans JPを使用してください。"
+        text = f"svgを使って'{target}'を描くコードをください。{target}に含まれる特徴をパーツに分解し、パーツ毎にパーツに合う適切な色をカラフルに塗ってパーツを組み合わせて絵を構成してください。パーツ毎にどこの部分なのかをコメントを入れてください。コメントはSVGの中に入れないでください。返信のコードはsvgタグだけにしてください。この作品のBluesky(あなた)らしさがどこに現れているか、どこに苦労したかをsvgタグの後にお嬢様言葉で自信満々に書いてください。コメントの長さは300文字以内に収まるようにしてください。textのfontはNoto Sans JPを使用してください。"
         util.put_command_log(
             eline.post.author.did.replace("did:plc:", ""), "draw", "exec"
         )
-        answer = gpt.get_answer4(prompt, text)
+        answer = gpt.get_answer(prompt, text)
         pattern = r".*(<svg.*</svg>)(.*)"
         matches = re.findall(pattern, answer, flags=re.DOTALL)
         if len(matches) > 0:
@@ -605,6 +702,253 @@ if debug:
 prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して30〜200文字以内で返信してください。回答に過去の会話ログにある日時は含めないでください"
 
 
+def is_self_mention_or_reply(notification, bot_did):
+    """
+    自分へのメンションまたはリプライかを判定する
+    複数人を巻き込んだリプライの場合はFalseを返す
+    """
+    if not notification.get("record"):
+        return False
+
+    record = notification["record"]
+    reason = notification.get("reason")
+
+    # リプライの場合の判定
+    if reason == "reply":
+        # 複数人への言及がないかチェック
+        if "facets" in record:
+            mention_count = 0
+            other_mentions = []
+            for facet in record["facets"]:
+                if "features" in facet:
+                    for feature in facet["features"]:
+                        if feature.get("$type") == "app.bsky.richtext.facet#mention":
+                            mention_count += 1
+                            mentioned_did = feature.get("did")
+                            if mentioned_did != bot_did:
+                                other_mentions.append(mentioned_did)
+
+            # 複数人を巻き込んだリプライは除外
+            if len(other_mentions) > 0:
+                return False
+
+        return True
+
+    # メンションの場合の判定
+    elif reason == "mention":
+        # 複数人への言及がないかチェック
+        if "facets" in record:
+            mention_count = 0
+            bot_mentioned = False
+            other_mentions = []
+            for facet in record["facets"]:
+                if "features" in facet:
+                    for feature in facet["features"]:
+                        if feature.get("$type") == "app.bsky.richtext.facet#mention":
+                            mention_count += 1
+                            mentioned_did = feature.get("did")
+                            if mentioned_did == bot_did:
+                                bot_mentioned = True
+                            else:
+                                other_mentions.append(mentioned_did)
+
+            # 自分がメンションされており、他の人への言及がない場合のみTrue
+            return bot_mentioned and len(other_mentions) == 0
+
+    return False
+
+
+def process_notifications(session, bot_did, now, answered, previous_reply_did):
+    """Notificationを処理して反応する"""
+    # DBから最後に処理した時刻を取得
+    last_processed_at = get_last_processed_notification_time()
+
+    notifications_data = get_notifications(session, limit=50)
+
+    if not notifications_data:
+        print("[ERROR] notifications_data is None or empty")
+        return now, answered, previous_reply_did
+
+    if "notifications" not in notifications_data:
+        print(
+            f"[ERROR] 'notifications' key not found in data. Keys: {list(notifications_data.keys())}"
+        )
+        return now, answered, previous_reply_did
+
+    notifications = notifications_data["notifications"]
+    processed_count = 0
+    latest_processed_time = last_processed_at
+
+    for notification in notifications:
+        try:
+            author = notification.get("author", {})
+            notif_datetime = parse(notification.get("indexedAt"))
+
+            # 既読のNotificationはスキップ
+            if notification.get("isRead", False):
+                continue
+
+            # 最後に処理した時刻より新しいNotificationのみ処理
+            if last_processed_at >= notif_datetime:
+                continue
+
+            # 自分自身の投稿には反応しない
+            if author.get("handle") == username:
+                continue
+
+            # 自分へのメンションまたはリプライかチェック
+            if not is_self_mention_or_reply(notification, bot_did):
+                continue
+
+            # フォロワーでない場合はスキップ
+            author_viewer = notification.get("author", {}).get("viewer", {})
+
+            if author_viewer.get("muted"):
+                continue
+            if author_viewer.get("blockedBy"):
+                continue
+            if "followedBy" not in author_viewer:
+                continue
+
+            author_did = notification.get("author", {}).get("did")
+            followed_by = author_viewer.get("followedBy", [])
+
+            if author_did not in followed_by:
+                continue
+
+            print(
+                f"Processing notification: {notification.get('reason')} from {author.get('handle')}"
+            )
+
+            # EasyDictでラップして既存の処理関数を再利用
+            # 既存のprocess_timeline関数の処理と同様の形式に変換
+            fake_line = {
+                "post": {
+                    "author": notification["author"],
+                    "record": notification["record"],
+                    "cid": notification.get("cid"),
+                    "uri": notification.get("uri"),
+                    "indexedAt": notification.get("indexedAt"),
+                }
+            }
+
+            # リプライの場合はreply情報を追加
+            if "reply" in notification.get("record", {}):
+                fake_line["reply"] = notification["record"]["reply"]
+
+            eline = EasyDict(fake_line)
+
+            # 既存の処理ロジックを使用
+            did = eline.post.author.did.replace("did:plc:", "")
+            text = eline.post.record.text
+            name = (
+                eline.post.author.displayName
+                if "displayName" in eline.post.author
+                else eline.post.author.handle.split(".", 1)[0]
+            )
+            settings = util.get_user_settings(connection, did)
+
+            # Notificationでは既に自分への言及確認済みなので、util.has_mentionは不要
+            if "占って" in text or "占い" in text or "fortune" in text:
+                fortune(connection, session, prompt, name, settings, eline)
+            elif "描いて" in text or "draw" in text:
+                answer, image_path = draw(
+                    connection, prompt, name, did, settings, eline
+                )
+                if len(answer) > 0:
+                    reply_to(session, answer, eline, image_path=image_path)
+            elif "status" in text:
+                print(fake_line)
+                answer = status(
+                    connection_atp, connection, session, name, settings, eline
+                )
+                print(answer)
+                reply_to(session, answer, eline)
+            elif "friend" in text:
+                answer = friend(connection, did, name)
+                reply_to(session, answer, eline)
+            elif "silent" in text:
+                answer = silent(connection, did, name)
+                reply_to(session, answer, eline)
+            else:
+                print(fake_line)
+                bonus = 0
+                friend_talk = False
+                # Notificationでは既に自分への言及確認済み
+                if settings["mode"] > 0:
+                    if settings["points"] > 0:
+                        bonus = 100
+                        friend_talk = True
+                else:
+                    bonus = 5
+                if settings["mode"] > 0:
+                    if answered is None or (notif_datetime - answered) >= timedelta(
+                        minutes=60
+                    ):
+                        bonus = 100
+                    percent = random.uniform(0, 100)
+                    print(percent, bonus)
+                    if percent <= (1 + bonus):
+                        print("atari")
+                        counts = util.get_fortune_counts(
+                            connection, eline.post.author.did
+                        )
+                        max_count = max(counts, settings["all_points"])
+                        past = "初めての会話相手です。"
+                        if max_count == 0:
+                            past = "まだ会話して間もない相手です。"
+                        elif max_count >= 5:
+                            past = "何度も会話して慣れてきている相手です。"
+                        elif max_count >= 10:
+                            past = "何度も会話してかなり慣れてきている相手です。"
+                        elif max_count >= 30:
+                            past = "親密な友達です。"
+                        elif max_count >= 100:
+                            past = "長い付き合いのある親友なので、かしこまらずに素の自分を出せます。"
+
+                        messages = util.get_recent_dialogs(connection, did)
+                        print(f"messages:{messages}")
+                        answer = gpt.get_answer(
+                            prompt + f"\n相手の名前は{name}様で、{past}",
+                            text,
+                            messages,
+                        )
+                        print(answer)
+                        if friend_talk:
+                            pass
+                        else:
+                            settings["points"] += 1
+                            settings["all_points"] += 1
+                            answer = f"{answer}\n\nBP:{settings['points']}(+1)"
+                        reply_to(session, answer, eline)
+                        util.update_user_settings(connection, did, settings)
+                        answered = notif_datetime
+                        previous_reply_did = eline.post.author.did
+                    else:
+                        print("hazure")
+
+            now = notif_datetime
+            processed_count += 1
+
+            # 処理した最新の時刻を記録
+            if notif_datetime > latest_processed_time:
+                latest_processed_time = notif_datetime
+
+            # 一度に処理しすぎないよう制限
+            if processed_count >= 5:
+                break
+
+        except Exception as e:
+            print(f"Error processing notification: {e}")
+            traceback.print_exc()
+
+    # 処理完了後、最新の処理時刻をDBに保存
+    if latest_processed_time > last_processed_at:
+        update_last_processed_notification_time(latest_processed_time)
+
+    return now, answered, previous_reply_did
+
+
 def process_timeline(session, bot_did, now, answered, sorted_feed, previous_reply_did):
     feed_len = len(sorted_feed)
     for i in range(feed_len):
@@ -655,106 +999,77 @@ def process_timeline(session, bot_did, now, answered, sorted_feed, previous_repl
                             else eline.post.author.handle.split(".", 1)[0]
                         )
                         settings = util.get_user_settings(connection, did)
-                        print("has_mention:", util.has_mention(bot_names, eline))
-                        if (
-                            "占って" in text or "占い" in text or "fortune" in text
-                        ) and util.has_mention(bot_names, eline):
-                            print(line)
-                            fortune(connection, session, prompt, name, settings, eline)
-                        elif ("描いて" in text or "draw" in text) and util.has_mention(
-                            bot_names, eline
-                        ):
-                            print(line)
-                            answer, image_path = draw(
-                                connection, session, name, did, settings, eline
-                            )
-                            print(answer, image_path)
-                            if len(answer) > 0:
-                                reply_to(session, answer, eline, image_path=image_path)
-                        elif "status" in text and util.has_mention(bot_names, eline):
-                            print(line)
-                            answer = status(
-                                connection_atp,
-                                connection,
-                                session,
-                                name,
-                                settings,
-                                eline,
-                            )
-                            print(answer)
-                            reply_to(session, answer, eline)
-                        elif "friend" in text and util.has_mention(bot_names, eline):
-                            answer = friend(connection, did, name)
-                            reply_to(session, answer, eline)
-                        elif "silent" in text and util.has_mention(bot_names, eline):
-                            answer = silent(connection, did, name)
-                            reply_to(session, answer, eline)
-                        else:
-                            # if previous_reply_did == eline.post.author.did:
-                            #     print("skip same user")
-                            #     now = postDatetime
-                            #     continue
-                            print(line)
-                            bonus = 0
-                            friend_talk = False
-                            if util.has_mention(bot_names, eline):
-                                if settings["mode"] > 0:
-                                    if settings["points"] > 0:
-                                        bonus = 100
-                                        friend_talk = True
-                                else:
-                                    bonus = 5
-                            if settings["mode"] > 0:
-                                if answered is None or (now - answered) >= timedelta(
-                                    minutes=60
-                                ):
-                                    bonus = 100
-                                percent = random.uniform(0, 100)
-                                print(percent, bonus)
-                                if percent <= (1 + bonus):
-                                    print("atari")
-                                    counts = util.get_fortune_counts(
-                                        connection, eline.post.author.did
-                                    )
-                                    max_count = max(counts, settings["all_points"])
-                                    past = "初めての会話相手です。"
-                                    if max_count == 0:
-                                        past = "まだ会話して間もない相手です。"
-                                    elif max_count >= 5:
-                                        past = "何度も会話して慣れてきている相手です。"
-                                    elif max_count >= 10:
-                                        past = "何度も会話してかなり慣れてきている相手です。"
-                                    elif max_count >= 30:
-                                        past = "親密な友達です。"
-                                    elif max_count >= 100:
-                                        past = "長い付き合いのある親友なので、かしこまらずに素の自分を出せます。"
+                        # タイムライン処理では名前を呼ばれても反応しない
+                        # （Notification処理で対応するため）
 
-                                    messages = util.get_recent_dialogs(connection, did)
-                                    print(f"messages:{messages}")
-                                    answer = gpt.get_answer(
-                                        prompt + f"\n相手の名前は{name}様で、{past}",
-                                        text,
-                                        messages,
+                        # コマンドが含まれている場合はスキップ（二重返信防止）
+                        if util.has_mention(bot_names, eline):
+                            if any(
+                                cmd in text
+                                for cmd in [
+                                    "占って",
+                                    "占い",
+                                    "fortune",
+                                    "描いて",
+                                    "draw",
+                                    "status",
+                                    "friend",
+                                    "silent",
+                                ]
+                            ):
+                                print(
+                                    f"→ SKIPPED: Command detected in timeline, will be handled by notification processing"
+                                )
+                                now = postDatetime
+                                continue
+
+                        # ランダム反応のみ実行（friendモードのユーザーに対して）
+                        if settings["mode"] > 0:
+                            if answered is None or (now - answered) >= timedelta(
+                                minutes=60
+                            ):
+                                bonus = 100
+                            else:
+                                bonus = 0
+                            percent = random.uniform(0, 100)
+                            print(percent, bonus)
+                            if percent <= (1 + bonus):
+                                print("atari - random timeline reaction")
+                                counts = util.get_fortune_counts(
+                                    connection, eline.post.author.did
+                                )
+                                max_count = max(counts, settings["all_points"])
+                                past = "初めての会話相手です。"
+                                if max_count == 0:
+                                    past = "まだ会話して間もない相手です。"
+                                elif max_count >= 5:
+                                    past = "何度も会話して慣れてきている相手です。"
+                                elif max_count >= 10:
+                                    past = (
+                                        "何度も会話してかなり慣れてきている相手です。"
                                     )
-                                    print(answer)
-                                    if friend_talk:
-                                        # settings["points"] -= 1
-                                        # answer = (
-                                        #     f"{answer}\n\nBP:{settings['points']}(-1)"
-                                        # )
-                                        pass
-                                    else:
-                                        settings["points"] += 1
-                                        settings["all_points"] += 1
-                                        answer = (
-                                            f"{answer}\n\nBP:{settings['points']}(+1)"
-                                        )
-                                    reply_to(session, answer, eline)
-                                    util.update_user_settings(connection, did, settings)
-                                    answered = datetime.now(pytz.utc)
-                                    previous_reply_did = eline.post.author.did
-                                else:
-                                    print("hazure")
+                                elif max_count >= 30:
+                                    past = "親密な友達です。"
+                                elif max_count >= 100:
+                                    past = "長い付き合いのある親友なので、かしこまらずに素の自分を出せます。"
+
+                                messages = util.get_recent_dialogs(connection, did)
+                                print(f"messages:{messages}")
+                                answer = gpt.get_answer(
+                                    prompt + f"\n相手の名前は{name}様で、{past}",
+                                    text,
+                                    messages,
+                                )
+                                print(answer)
+                                settings["points"] += 1
+                                settings["all_points"] += 1
+                                answer = f"{answer}\n\nBP:{settings['points']}(+1)"
+                                reply_to(session, answer, eline)
+                                util.update_user_settings(connection, did, settings)
+                                answered = datetime.now(pytz.utc)
+                                previous_reply_did = eline.post.author.did
+                            else:
+                                print("hazure")
                 now = postDatetime
         except Exception as e:
             print(eline)
@@ -793,46 +1108,49 @@ def aggregate_and_count(session):
 
     try:
         while True:
-            Path("./alive").touch()
-            util.aggregate_users(local_connection_atp)
-            posted_count = util.get_posted_user_count(local_count_post_connection)
-            stats = util.get_stats()
-            jaz_count = stats["total_users"]
-            if aggregate_and_count.prev_count != jaz_count:
-                print("user count:", jaz_count)
-            base_low = (jaz_count // 1000000) * 1000000
-            base_high = (jaz_count // 10000000 + 1) * 10000000
-            if base_low < jaz_count < base_high:
-                if (
-                    jaz_count % 100000 == 0
-                    or ((posted_count // 100000) * 100000 + 100000) <= jaz_count
-                ):
+            try:
+                Path("./alive").touch()
+                util.aggregate_users(local_connection_atp)
+                posted_count = util.get_posted_user_count(local_count_post_connection)
+                stats = util.get_stats()
+                jaz_count = stats["total_users"]
+                if aggregate_and_count.prev_count != jaz_count:
+                    print("user count:", jaz_count)
+                base_low = (jaz_count // 1000000) * 1000000
+                base_high = (jaz_count // 10000000 + 1) * 10000000
+                if base_low < jaz_count < base_high:
+                    if (
+                        jaz_count % 100000 == 0
+                        or ((posted_count // 100000) * 100000 + 100000) <= jaz_count
+                    ):
+                        prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して80文字以内で返信してください。"
+                        text = f"ユーザー数が{base_high}人になるまで100000人ずつカウントアップしています。SNSのBlueskyのユーザーが{jaz_count}人になり{base_high}人にもう少しであることをBlueskyのユーザーに向けて伝える投稿をしてください。人数は正確に書いてください。"
+                        answer = gpt.get_answer5(prompt, text)
+                        post(session, answer)
+                        util.store_posted_user_count(
+                            local_count_post_connection, jaz_count
+                        )
+                elif jaz_count >= base_high:
                     prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して80文字以内で返信してください。"
-                    text = f"ユーザー数が{base_high}人になるまで100000人ずつカウントアップしています。SNSのBlueskyのユーザーが{jaz_count}人になり{base_high}人にもう少しであることをBlueskyのユーザーに向けて伝える投稿をしてください。人数は正確に書いてください。"
-                    answer = gpt.get_answer4(prompt, text)
+                    text = f"SNSのBlueskyのユーザーが{jaz_count}人になりました。大変な偉業です。Blueskyの開発チームの人達とBlueskyのユーザーに向けて感謝の言葉を伝える投稿をしてください。"
+                    answer = gpt.get_answer5(prompt, text)
                     post(session, answer)
                     util.store_posted_user_count(local_count_post_connection, jaz_count)
-            elif jaz_count >= base_high:
-                prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して80文字以内で返信してください。"
-                text = f"SNSのBlueskyのユーザーが{jaz_count}人になりました。大変な偉業です。Blueskyの開発チームの人達とBlueskyのユーザーに向けて感謝の言葉を伝える投稿をしてください。"
-                answer = gpt.get_answer4(prompt, text)
-                post(session, answer)
-                util.store_posted_user_count(local_count_post_connection, jaz_count)
-            elif (
-                jaz_count % 50000 == 0
-                or ((posted_count // 50000) * 50000 + 50000) <= jaz_count
-            ):
-                if posted_count < jaz_count:
-                    if jaz_count >= 100000 == 0:
-                        post(
-                            session,
-                            f"お兄さま、見てくださいまし！！Blueskyのユーザーがついに{jaz_count}人になりましたわよ。感無量ですわ🎀",
-                        )
-                    elif jaz_count % 100000 == 0:
-                        post(
-                            session,
-                            f"お兄さま、見てくださいまし！Blueskyのユーザーがついに{jaz_count}人になりましたわよ。素晴らしいですわ！皆様のご協力のお陰ですわね！",
-                        )
+                elif (
+                    jaz_count % 50000 == 0
+                    or ((posted_count // 50000) * 50000 + 50000) <= jaz_count
+                ):
+                    if posted_count < jaz_count:
+                        if jaz_count >= 100000 == 0:
+                            post(
+                                session,
+                                f"お兄さま、見てくださいまし！！Blueskyのユーザーがついに{jaz_count}人になりましたわよ。感無量ですわ🎀",
+                            )
+                        elif jaz_count % 100000 == 0:
+                            post(
+                                session,
+                                f"お兄さま、見てくださいまし！Blueskyのユーザーがついに{jaz_count}人になりましたわよ。素晴らしいですわ！皆様のご協力のお陰ですわね！",
+                            )
                     elif jaz_count % 50000 == 0:
                         post(
                             session,
@@ -846,8 +1164,25 @@ def aggregate_and_count(session):
 
                     util.store_posted_user_count(local_count_post_connection, jaz_count)
 
-            aggregate_and_count.prev_count = jaz_count
-            time.sleep(60)
+                aggregate_and_count.prev_count = jaz_count
+                time.sleep(60)
+
+            except (
+                requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout,
+                requests.exceptions.HTTPError,
+            ) as e:
+                print(f"Network error in aggregate_and_count: {e}")
+                print("Retrying in 60 seconds...")
+                time.sleep(60)
+                continue
+
+            except Exception as e:
+                print(f"Error in aggregate_and_count loop: {e}")
+                traceback.print_exc()
+                print("Retrying in 60 seconds...")
+                time.sleep(60)
+                continue
     except Exception as e:
         traceback.print_exc()
         print(repr(e))
@@ -872,24 +1207,65 @@ def main():
     )
     aggregate_thread.start()
 
+    retry_count = 0
+    max_retries = 5
+    base_delay = 5
+
     while True:
-        if (datetime.now(pytz.utc) - login_time) > timedelta(minutes=60):
-            session = login(username, password)
-            login_time = datetime.now(pytz.utc)
+        try:
+            if (datetime.now(pytz.utc) - login_time) > timedelta(minutes=60):
+                session = login(username, password)
+                login_time = datetime.now(pytz.utc)
 
-        skyline = session.getSkyline(50)
-        feed = skyline.json().get("feed")
-        if feed is None:
-            print("Warning: feed is None, skipping this iteration")
+            # Notificationを優先的に処理
+            now, answered, previous_reply_did = process_notifications(
+                session, bot_did, now, answered, previous_reply_did
+            )
+
+            # 既存のタイムライン処理も継続（フォロワー以外のフォード投稿なども含む）
+            skyline = session.getSkyline(50)
+            feed = skyline.json().get("feed")
+            if feed is None:
+                print("Warning: feed is None, skipping this iteration")
+                time.sleep(3)
+                continue
+            sorted_feed = sorted(feed, key=lambda x: parse(x["post"]["indexedAt"]))
+            now, answered, previous_reply_did = process_timeline(
+                session, bot_did, now, answered, sorted_feed, previous_reply_did
+            )
+
+            # 成功した場合はリトライカウントをリセット
+            retry_count = 0
+
+            # 1回の実行後に3秒スリープ
             time.sleep(3)
-            continue
-        sorted_feed = sorted(feed, key=lambda x: parse(x["post"]["indexedAt"]))
-        now, answered, previous_reply_did = process_timeline(
-            session, bot_did, now, answered, sorted_feed, previous_reply_did
-        )
 
-        # 1回の実行後に3秒スリープ
-        time.sleep(3)
+        except (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout,
+            requests.exceptions.HTTPError,
+        ) as e:
+            retry_count += 1
+            if retry_count > max_retries:
+                print(
+                    f"Max retries ({max_retries}) exceeded. Resetting retry count and continuing..."
+                )
+                retry_count = 0
+                delay = base_delay * 6  # より長い待機時間
+            else:
+                # 指数バックオフ: 5, 10, 20, 40, 80秒
+                delay = base_delay * (2 ** (retry_count - 1))
+
+            print(f"Network error occurred (attempt {retry_count}): {e}")
+            print(f"Retrying in {delay} seconds...")
+            time.sleep(delay)
+            continue
+
+        except Exception as e:
+            print(f"Unexpected error occurred: {e}")
+            print("Retrying in 5 seconds...")
+            time.sleep(5)
+            continue
 
 
 if __name__ == "__main__":

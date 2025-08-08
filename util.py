@@ -2,6 +2,7 @@ import requests
 import json
 import sqlite3
 import traceback
+import time
 from datetime import datetime
 
 
@@ -183,8 +184,29 @@ def get_did_list(after=None):
     url = "https://plc.directory/export"
     if after:
         url += f"?after={after}"
-    response = requests.get(url, timeout=(15, 15))
-    return response.text
+
+    max_retries = 3
+    base_delay = 5
+
+    for attempt in range(max_retries + 1):
+        try:
+            response = requests.get(url, timeout=(15, 15))
+            return response.text
+        except (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout,
+            requests.exceptions.HTTPError,
+        ) as e:
+            if attempt == max_retries:
+                print(f"Failed to get DID list after {max_retries + 1} attempts: {e}")
+                return ""  # 空文字列を返して処理を継続
+
+            delay = base_delay * (2**attempt)
+            print(f"Network error in get_did_list (attempt {attempt + 1}): {e}")
+            print(f"Retrying in {delay} seconds...")
+            time.sleep(delay)
+
+    return ""  # フォールバック
 
 
 def insert_did_many(connection, did_list):
