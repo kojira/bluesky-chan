@@ -167,8 +167,14 @@ def get_last_processed_notification_time():
         if row:
             return parse(row["last_processed_at"])
         else:
-            # 初回起動時：現在時刻を返す
-            return datetime.now(pytz.utc)
+            # 初回起動時：現在時刻をDBに記録して返す
+            current_time = datetime.now(pytz.utc)
+            cur.execute(
+                "INSERT INTO notification_cursor (last_processed_at) VALUES (?)",
+                (current_time.isoformat(),),
+            )
+            connection.commit()
+            return current_time
     except Exception as e:
         print(f"Error getting last processed notification time: {e}")
         return datetime.now(pytz.utc)
