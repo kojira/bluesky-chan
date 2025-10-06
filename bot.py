@@ -628,7 +628,7 @@ def draw(connection, prompt, name, did, settings, eline):
         util.put_command_log(
             eline.post.author.did.replace("did:plc:", ""), "draw", "exec"
         )
-        answer = gpt.get_answer(prompt, text)
+        answer = gpt.get_answer5_nano(prompt, text)
         pattern = r".*(<svg.*</svg>)(.*)"
         matches = re.findall(pattern, answer, flags=re.DOTALL)
         if len(matches) > 0:
@@ -1131,7 +1131,7 @@ def aggregate_and_count(session):
                     ):
                         prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して80文字以内で返信してください。"
                         text = f"ユーザー数が{base_high}人になるまで100000人ずつカウントアップしています。SNSのBlueskyのユーザーが{jaz_count}人になり{base_high}人にもう少しであることをBlueskyのユーザーに向けて伝える投稿をしてください。人数は正確に書いてください。"
-                        answer = gpt.get_answer5(prompt, text)
+                        answer = gpt.get_answer5_nano(prompt, text)
                         post(session, answer)
                         util.store_posted_user_count(
                             local_count_post_connection, jaz_count
@@ -1139,7 +1139,7 @@ def aggregate_and_count(session):
                 elif jaz_count >= base_high:
                     prompt = f"これはあなたの人格です。'{personality}'\nこの人格を演じて次の文章に対して80文字以内で返信してください。"
                     text = f"SNSのBlueskyのユーザーが{jaz_count}人になりました。大変な偉業です。Blueskyの開発チームの人達とBlueskyのユーザーに向けて感謝の言葉を伝える投稿をしてください。"
-                    answer = gpt.get_answer5(prompt, text)
+                    answer = gpt.get_answer5_nano(prompt, text)
                     post(session, answer)
                     util.store_posted_user_count(local_count_post_connection, jaz_count)
                 elif (
